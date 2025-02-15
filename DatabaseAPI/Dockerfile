@@ -5,7 +5,7 @@ WORKDIR /app
 # Use the .NET SDK image to build the app
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
-COPY ["DatabaseAPI.csproj", "./"]
+COPY DatabaseAPI.csproj ./
 RUN dotnet restore "DatabaseAPI.csproj"
 
 # Copy the rest of the application source code and build
