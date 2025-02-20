@@ -1,0 +1,12 @@
+{
+  "Version": 1,
+  "Hash": "22Ac2mybYJqrFbsuAOdDsBvuM5ByPPHKfFWHRKasrqA=",
+  "Source": "DatabaseAPI",
+  "BasePath": "_content/DatabaseAPI",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": [],
+  "Endpoints": []
+}
