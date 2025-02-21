@@ -3,15 +3,17 @@ FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
 # Copy solution and project files
-COPY *.sln ./
-COPY *.csproj ./
-COPY . ./
+COPY DatabaseAPI.sln ./
+COPY DatabaseAPI.csproj ./
 
 # Restore dependencies
-RUN dotnet restore
+RUN dotnet restore DatabaseAPI.csproj
+
+# Copy the remaining files
+COPY . ./
 
 # Build and publish the application
-RUN dotnet publish -c Release -o /app/publish
+RUN dotnet publish DatabaseAPI.csproj -c Release -o /app/publish
 
 # Use the runtime image
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime

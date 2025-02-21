@@ -11,7 +11,7 @@ public class DatabaseController : ControllerBase
 
     public DatabaseController(IConfiguration configuration)
     {
-        _connectionString = configuration.GetConnectionString("DefaultConnection");
+        _connectionString = configuration.GetConnectionString("DefaultConnection") ?? string.Empty; // Prevent null warning
     }
 
     [HttpPost("Login")]
@@ -22,24 +22,20 @@ public class DatabaseController : ControllerBase
             return BadRequest(new { Success = false, Message = "Invalid credentials" });
         }
 
-        using (var connection = new MySqlConnection(_connectionString))
-        {
-            await connection.OpenAsync();
-            using (var cmd = new MySqlCommand("SELECT user_Role FROM ManageUsers WHERE user_Name = @USERNAME AND user_Pass = @PASSWORD", connection))
-            {
-                cmd.Parameters.AddWithValue("@USERNAME", user.user_Name);
-                cmd.Parameters.AddWithValue("@PASSWORD", user.user_Pass);
+        using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync();
 
-                using (var reader = await cmd.ExecuteReaderAsync())
-                {
-                    if (await reader.ReadAsync())
-                    {
-                        string role = reader["user_Role"].ToString();
-                        return Ok(new { Success = true, Role = role });
-                    }
-                }
-            }
+        using var cmd = new MySqlCommand("SELECT user_Role FROM ManageUsers WHERE user_Name = @USERNAME AND user_Pass = @PASSWORD", connection);
+        cmd.Parameters.AddWithValue("@USERNAME", user.user_Name);
+        cmd.Parameters.AddWithValue("@PASSWORD", user.user_Pass);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        if (await reader.ReadAsync())
+        {
+            string role = reader["user_Role"]?.ToString() ?? "Unknown";
+            return Ok(new { Success = true, Role = role });
         }
+
         return Unauthorized(new { Success = false, Message = "Incorrect username or password" });
     }
 }
@@ -47,6 +43,6 @@ public class DatabaseController : ControllerBase
 // Model to receive login requests
 public class UserLogin
 {
-    public string user_Name { get; set; }
-    public string user_Pass { get; set; }
+    public string user_Name { get; set; } = string.Empty; // Initialize to avoid null warning
+    public string user_Pass { get; set; } = string.Empty; // Initialize to avoid null warning
 }
