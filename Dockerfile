@@ -1,21 +1,20 @@
-﻿# Use the official .NET 8 runtime as base image
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
-WORKDIR /app
-
-# Use the .NET SDK image to build the app
+﻿# Use the official .NET SDK image for building
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
-COPY DatabaseAPI.csproj ./
-RUN dotnet restore "DatabaseAPI.csproj"
 
-# Copy the rest of the application source code and build
-COPY . .
+# Copy solution and project files
+COPY *.sln ./
+COPY *.csproj ./
+COPY . ./
+
+# Restore dependencies
+RUN dotnet restore
+
+# Build and publish the application
 RUN dotnet publish -c Release -o /app/publish
 
-# Final runtime image
-FROM base AS final
+# Use the runtime image
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
-COPY --from=build /app/publish .
-
-# Set the entrypoint to run the API
+COPY --from=build /app/publish ./
 ENTRYPOINT ["dotnet", "DatabaseAPI.dll"]
