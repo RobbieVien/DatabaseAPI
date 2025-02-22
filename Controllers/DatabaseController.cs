@@ -19,7 +19,7 @@ public class DatabaseController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(user.user_Name) || string.IsNullOrWhiteSpace(user.user_Pass))
         {
-            return BadRequest(new { Success = false, Message = "Invalid credentials" });
+            return BadRequest(new {Message = "Invalid credentials" });
         }
 
         using var connection = new MySqlConnection(_connectionString);
@@ -36,7 +36,7 @@ public class DatabaseController : ControllerBase
             return Ok(new { Success = true, Role = role });
         }
 
-        return Unauthorized(new { Success = false, Message = "Incorrect username or password" });
+        return Unauthorized(new {Message = "Incorrect username or password" });
     }
 }
 
