@@ -38,11 +38,61 @@ public class DatabaseController : ControllerBase
 
         return Unauthorized("Incorrect username or password");
     }
+    [HttpPost("AddUser")]
+    public async Task<IActionResult> AddUser([FromBody] UserDto user)
+    {
+        if (user == null || string.IsNullOrWhiteSpace(user.UserName))
+        {
+            return BadRequest("Invalid user data.");
+        }
+
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        // Check if username already exists
+        string checkQuery = "SELECT COUNT(*) FROM ManageUsers WHERE user_Name = @UserName";
+        using var checkCmd = new MySqlCommand(checkQuery, con);
+        checkCmd.Parameters.AddWithValue("@UserName", user.UserName);
+        int userCount = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
+
+        if (userCount > 0)
+        {
+            return Conflict("Username already exists.");
+        }
+
+        // Insert new user
+        string insertQuery = @"INSERT INTO ManageUsers (user_Fname, user_Lname, user_Role, user_Status, user_Name, user_Pass)
+                              VALUES (@FirstName, @LastName, @Role, @Status, @UserName, @Password)";
+        using var insertCmd = new MySqlCommand(insertQuery, con);
+        insertCmd.Parameters.AddWithValue("@FirstName", user.FirstName);
+        insertCmd.Parameters.AddWithValue("@LastName", user.LastName);
+        insertCmd.Parameters.AddWithValue("@Role", user.Role);
+        insertCmd.Parameters.AddWithValue("@Status", user.Status);
+        insertCmd.Parameters.AddWithValue("@UserName", user.UserName);
+        insertCmd.Parameters.AddWithValue("@Password", user.Password);
+
+        await insertCmd.ExecuteNonQueryAsync();
+
+        return Ok("User added successfully.");
+    }
+
 }
+
+
+
 
 // Model to receive login requests
 public class UserLogin
 {
     public string user_Name { get; set; } = string.Empty; // Initialize to avoid null warning
     public string user_Pass { get; set; } = string.Empty; // Initialize to avoid null warning
+}
+public class UserDto
+{
+    public string FirstName { get; set; }
+    public string LastName { get; set; }
+    public string Role { get; set; }
+    public string Status { get; set; }
+    public string UserName { get; set; }
+    public string Password { get; set; }
 }
