@@ -38,6 +38,7 @@ public class DatabaseController : ControllerBase
 
         return Unauthorized("Incorrect username or password");
     }
+
     [HttpPost("AddUser")]
     public async Task<IActionResult> AddUser([FromBody] UserDto user)
     {
@@ -75,6 +76,71 @@ public class DatabaseController : ControllerBase
 
         return Ok("User added successfully.");
     }
+
+
+    [HttpDelete("DeleteUser/{id}")]
+    public async Task<IActionResult> DeleteUser(int id)
+    {
+        Console.WriteLine($"DeleteUser called with ID: {id}"); // Log when the route is hit
+
+        if (id <= 0)
+        {
+            return BadRequest("Invalid user ID.");
+        }
+
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string deleteQuery = "DELETE FROM ManageUsers WHERE user_Id = @UserId";
+        using var deleteCmd = new MySqlCommand(deleteQuery, con);
+        deleteCmd.Parameters.AddWithValue("@UserId", id);
+
+        int rowsAffected = await deleteCmd.ExecuteNonQueryAsync();
+
+        if (rowsAffected > 0)
+        {
+            return Ok("User has been deleted successfully.");
+        }
+        else
+        {
+            return NotFound("No user found with the selected ID.");
+        }
+    }
+
+
+    [HttpGet("Test")]
+    public IActionResult Test()
+    {
+        return Ok("API is working!");
+    }
+
+    [HttpGet("GetUsers")]
+    public async Task<IActionResult> GetUsers()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = "SELECT user_Id, user_Fname, user_Lname, user_Role, user_Status, user_Name FROM ManageUsers";
+        using var cmd = new MySqlCommand(query, con);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+
+        var users = new List<UserDto>();
+        while (await reader.ReadAsync())
+        {
+            users.Add(new UserDto
+            {
+                FirstName = reader["user_Fname"]?.ToString(),
+                LastName = reader["user_Lname"]?.ToString(),
+                Role = reader["user_Role"]?.ToString(),
+                Status = reader["user_Status"]?.ToString(),
+                UserName = reader["user_Name"]?.ToString()
+            });
+        }
+
+        return Ok(users);
+    }
+
 
 }
 
