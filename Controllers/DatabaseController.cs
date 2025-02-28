@@ -125,7 +125,7 @@ public class DatabaseController : ControllerBase
         {
             users.Add(new UserDto
             {
-                Password = reader["user_Id"]?.ToString(), 
+                UserId = Convert.ToInt32(reader["user_Id"]), // Make sure user_Id is included
                 FirstName = reader["user_Fname"]?.ToString(),
                 LastName = reader["user_Lname"]?.ToString(),
                 Role = reader["user_Role"]?.ToString(),
@@ -150,6 +150,7 @@ public class UserLogin
 }
 public class UserDto
 {
+    public int UserId { get; set; }
     public string FirstName { get; set; }
     public string LastName { get; set; }
     public string Role { get; set; }
