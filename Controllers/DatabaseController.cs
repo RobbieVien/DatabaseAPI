@@ -108,11 +108,6 @@ public class DatabaseController : ControllerBase
     }
 
 
-    [HttpGet("Test")]
-    public IActionResult Test()
-    {
-        return Ok("API is working!");
-    }
 
     [HttpGet("GetUsers")]
     public async Task<IActionResult> GetUsers()
@@ -130,6 +125,7 @@ public class DatabaseController : ControllerBase
         {
             users.Add(new UserDto
             {
+                Password = reader["user_Id"]?.ToString(), 
                 FirstName = reader["user_Fname"]?.ToString(),
                 LastName = reader["user_Lname"]?.ToString(),
                 Role = reader["user_Role"]?.ToString(),
@@ -140,7 +136,6 @@ public class DatabaseController : ControllerBase
 
         return Ok(users);
     }
-
 
 }
 
