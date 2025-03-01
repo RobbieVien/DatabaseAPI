@@ -41,6 +41,14 @@ public class DatabaseController : ControllerBase
         return Unauthorized("Incorrect username or password");
     }
 
+
+
+
+
+    //----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
     // ADD User IN MANAGE USERS
 
     [HttpPost("AddUser")]
@@ -93,17 +101,6 @@ public class DatabaseController : ControllerBase
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
 
-        // Check if category already exists
-        string checkQuery = "SELECT COUNT(*) FROM Category WHERE cat_legalcase = @LegalCase";
-        using var checkCmd = new MySqlCommand(checkQuery, con);
-        checkCmd.Parameters.AddWithValue("@LegalCase", category.CategoryLegalCase);
-        int categoryCount = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
-
-        if (categoryCount > 0)
-        {
-            return Conflict("Category already exists.");
-        }
-
         // Insert new category
         string insertQuery = @"INSERT INTO Category (cat_legalcase, cat_republicAct, cat_natureCase)
                           VALUES (@LegalCase, @RepublicAct, @NatureCase)";
@@ -119,6 +116,8 @@ public class DatabaseController : ControllerBase
 
 
 
+
+    //--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 
@@ -152,6 +151,39 @@ public class DatabaseController : ControllerBase
             return NotFound("No user found with the selected ID.");
         }
     }
+    
+    //DELETE IN CATEGORY
+
+    [HttpDelete("DeleteCategory/{id}")]
+    public async Task<IActionResult> DeleteCategory(int id)
+    {
+        Console.WriteLine($"DeleteUser called with ID: {id}"); // Log when the route is hit
+
+        if (id <= 0)
+        {
+            return BadRequest("Invalid user ID.");
+        }
+
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string deleteQuery = "DELETE FROM Category WHERE cat_Id = @CategoryId";
+        using var deleteCmd = new MySqlCommand(deleteQuery, con);
+        deleteCmd.Parameters.AddWithValue("@CategoryId", id);
+
+        int rowsAffected = await deleteCmd.ExecuteNonQueryAsync();
+
+        if (rowsAffected > 0)
+        {
+            return Ok("User has been deleted successfully.");
+        }
+        else
+        {
+            return NotFound("No user found with the selected ID.");
+        }
+    }
+
+    //------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
     //DATAGRIDVIEW GET USERS
 
@@ -183,6 +215,34 @@ public class DatabaseController : ControllerBase
         return Ok(users);
     }
 
+    [HttpGet("GetCategories")]
+    public async Task<IActionResult> GetCategories()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = "SELECT cat_Id, cat_legalcase, cat_republicAct, cat_natureCase FROM Category";
+        using var cmd = new MySqlCommand(query, con);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+
+        var categories = new List<Categorydto>();
+        while (await reader.ReadAsync())
+        {
+            categories.Add(new Categorydto
+            {
+                CategoryId = Convert.ToInt32(reader["cat_Id"]), // Make sure user_Id is included
+                CategoryLegalCase = reader["cat_legalcase"]?.ToString(),
+                CategoryRepublicAct = reader["cat_republicAct"]?.ToString(),
+                CategoryNatureCase = reader["cat_natureCase"]?.ToString()
+            });
+        }
+
+        return Ok(categories);
+    }
+
+    //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
     // IN DASHBOARD COUNT USERS
     [HttpGet("CountUsers")]
     public async Task<IActionResult> CountUsers()
@@ -209,13 +269,9 @@ public class DatabaseController : ControllerBase
 
 
 
-
+//-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 // DTO Query
-
-
-
-
 // Model to receive login requests
 public class UserLogin
 {
