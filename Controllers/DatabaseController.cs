@@ -175,13 +175,51 @@ public class DatabaseController : ControllerBase
 
         if (rowsAffected > 0)
         {
-            return Ok("User has been deleted successfully.");
+            return Ok("Category has been deleted successfully.");
         }
         else
         {
-            return NotFound("No user found with the selected ID.");
+            return NotFound("No category found with the selected ID.");
         }
     }
+
+    //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+    //UPDATE
+
+    [HttpPut("EditCategory/{id}")]
+    public async Task<IActionResult> EditCategory(int id, [FromBody] Categorydto category)
+    {
+        if (id <= 0 || category == null || string.IsNullOrWhiteSpace(category.CategoryLegalCase))
+        {
+            return BadRequest("Invalid category data.");
+        }
+
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string updateQuery = @"UPDATE Category
+                            SET cat_legalcase = @LegalCase,
+                                cat_republicAct = @RepublicAct,
+                                cat_natureCase = @NatureCase
+                            WHERE cat_Id = @Id";
+
+        using var updateCmd = new MySqlCommand(updateQuery, con);
+        updateCmd.Parameters.AddWithValue("@LegalCase", category.CategoryLegalCase);
+        updateCmd.Parameters.AddWithValue("@RepublicAct", category.CategoryRepublicAct);
+        updateCmd.Parameters.AddWithValue("@NatureCase", category.CategoryNatureCase);
+        updateCmd.Parameters.AddWithValue("@Id", id);
+
+        int rowsAffected = await updateCmd.ExecuteNonQueryAsync();
+
+        if (rowsAffected > 0)
+        {
+            return Ok("Category updated successfully.");
+        }
+
+        return NotFound("No category found with the specified ID.");
+    }
+
 
     //------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
