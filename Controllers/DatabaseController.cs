@@ -14,6 +14,8 @@ public class DatabaseController : ControllerBase
         _connectionString = configuration.GetConnectionString("DefaultConnection") ?? string.Empty; // Prevent null warning
     }
 
+    // LOGIN
+
     [HttpPost("Login")]
     public async Task<IActionResult> Login([FromBody] UserLogin user)
     {
@@ -38,6 +40,8 @@ public class DatabaseController : ControllerBase
 
         return Unauthorized("Incorrect username or password");
     }
+
+    // ADD User IN MANAGE USERS
 
     [HttpPost("AddUser")]
     public async Task<IActionResult> AddUser([FromBody] UserDto user)
@@ -77,6 +81,7 @@ public class DatabaseController : ControllerBase
         return Ok("User added successfully.");
     }
 
+    //DELETING USER IN MANAGE USER
 
     [HttpDelete("DeleteUser/{id}")]
     public async Task<IActionResult> DeleteUser(int id)
@@ -107,7 +112,7 @@ public class DatabaseController : ControllerBase
         }
     }
 
-
+    //DATAGRIDVIEW GET USERS
 
     [HttpGet("GetUsers")]
     public async Task<IActionResult> GetUsers()
@@ -137,6 +142,27 @@ public class DatabaseController : ControllerBase
         return Ok(users);
     }
 
+    // IN DASHBOARD COUNT USERS
+    [HttpGet("CountUsers")]
+    public async Task<IActionResult> CountUsers()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = "SELECT COUNT(*) FROM ManageUsers";
+        using var cmd = new MySqlCommand(query, con);
+
+        try
+        {
+            int userCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+            return Ok(userCount);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
+
 }
 
 
@@ -148,6 +174,8 @@ public class UserLogin
     public string user_Name { get; set; } = string.Empty; // Initialize to avoid null warning
     public string user_Pass { get; set; } = string.Empty; // Initialize to avoid null warning
 }
+
+//ADDING USERS
 public class UserDto
 {
     public int UserId { get; set; }
