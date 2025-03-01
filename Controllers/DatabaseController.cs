@@ -81,6 +81,47 @@ public class DatabaseController : ControllerBase
         return Ok("User added successfully.");
     }
 
+    // ADD CATEGORY
+    [HttpPost("AddCategory")]
+    public async Task<IActionResult> AddCategory([FromBody] Categorydto category)
+    {
+        if (category == null || string.IsNullOrWhiteSpace(category.CategoryLegalCase))
+        {
+            return BadRequest("Invalid category data.");
+        }
+
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        // Check if category already exists
+        string checkQuery = "SELECT COUNT(*) FROM Category WHERE cat_legalcase = @LegalCase";
+        using var checkCmd = new MySqlCommand(checkQuery, con);
+        checkCmd.Parameters.AddWithValue("@LegalCase", category.CategoryLegalCase);
+        int categoryCount = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
+
+        if (categoryCount > 0)
+        {
+            return Conflict("Category already exists.");
+        }
+
+        // Insert new category
+        string insertQuery = @"INSERT INTO Category (cat_legalcase, cat_republicAct, cat_natureCase)
+                          VALUES (@LegalCase, @RepublicAct, @NatureCase)";
+        using var insertCmd = new MySqlCommand(insertQuery, con);
+        insertCmd.Parameters.AddWithValue("@LegalCase", category.CategoryLegalCase);
+        insertCmd.Parameters.AddWithValue("@RepublicAct", category.CategoryRepublicAct);
+        insertCmd.Parameters.AddWithValue("@NatureCase", category.CategoryNatureCase);
+
+        await insertCmd.ExecuteNonQueryAsync();
+
+        return Ok("Category added successfully.");
+    }
+
+
+
+
+
+
     //DELETING USER IN MANAGE USER
 
     [HttpDelete("DeleteUser/{id}")]
@@ -168,6 +209,13 @@ public class DatabaseController : ControllerBase
 
 
 
+
+
+// DTO Query
+
+
+
+
 // Model to receive login requests
 public class UserLogin
 {
@@ -185,4 +233,13 @@ public class UserDto
     public string Status { get; set; }
     public string UserName { get; set; }
     public string Password { get; set; }
+}
+
+//ADDING CATRGORY
+public class Categorydto
+{
+    public int CategoryId { get; set; }
+    public string CategoryLegalCase { get; set; }
+    public string CategoryRepublicAct { get; set; }
+    public string CategoryNatureCase { get; set; }
 }
