@@ -226,8 +226,76 @@ public class DatabaseController : ControllerBase
     }
     }
 
+    //CourtRecord
 
-    //--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    [HttpPost("AddCourtRecord")]
+    public async Task<IActionResult> AddCourtRecord([FromBody] CourtRecorddto courtrecord)
+    {
+        if (courtrecord == null || string.IsNullOrWhiteSpace(courtrecord.RecordCaseNumber))
+        {
+            return BadRequest("Invalid court record data.");
+        }
+
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        try
+        {
+            Console.WriteLine($"Incoming Court Record: Case Number={courtrecord.RecordCaseNumber}, Title={courtrecord.RecordCaseTitle}");
+            Console.WriteLine($"Date Filed OCC: {courtrecord.RecordDateFiledOCC}, Date Filed Received: {courtrecord.RecordDateFiledReceived}");
+
+            // Check if a court record with the same case number already exists
+            string checkQuery = @"SELECT COUNT(*) FROM COURTRECORD 
+                             WHERE rec_Case_Number = @CaseNumber";
+
+            using var checkCmd = new MySqlCommand(checkQuery, con);
+            checkCmd.Parameters.AddWithValue("@CaseNumber", courtrecord.RecordCaseNumber.Trim());
+
+            var existingCount = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
+            Console.WriteLine($"Existing Court Record Count for case number '{courtrecord.RecordCaseNumber}': {existingCount}");
+
+            if (existingCount > 0)
+            {
+                return Conflict("A court record with the same case number already exists.");
+            }
+
+            // Insert new court record - convert DateOnly to DateTime for MySQL compatibility
+            string insertQuery = @"INSERT INTO COURTRECORD (rec_Case_Number, rec_Case_Title, rec_Date_Filed_Occ, rec_Date_Filed_Received, rec_Transferred, rec_Case_Status, rec_Nature_Case, rec_Nature_Descrip)
+                             VALUES (@CaseNumber, @CaseTitle, @RecordDateFiledOcc, @RecordDateFiledReceived, @RecordTransferred, @RecordCaseStatus, @RecordNatureCase, @RecordNatureDescription)";
+
+            using var insertCmd = new MySqlCommand(insertQuery, con);
+            insertCmd.Parameters.AddWithValue("@CaseNumber", courtrecord.RecordCaseNumber.Trim());
+            insertCmd.Parameters.AddWithValue("@CaseTitle", courtrecord.RecordCaseTitle);
+
+            // Convert DateOnly to DateTime for MySQL compatibility
+            DateTime occDateTime = new DateTime(courtrecord.RecordDateFiledOCC.Year,
+                                              courtrecord.RecordDateFiledOCC.Month,
+                                              courtrecord.RecordDateFiledOCC.Day);
+
+            DateTime receivedDateTime = new DateTime(courtrecord.RecordDateFiledReceived.Year,
+                                                   courtrecord.RecordDateFiledReceived.Month,
+                                                   courtrecord.RecordDateFiledReceived.Day);
+
+            insertCmd.Parameters.AddWithValue("@RecordDateFiledOcc", occDateTime);
+            insertCmd.Parameters.AddWithValue("@RecordDateFiledReceived", receivedDateTime);
+
+            insertCmd.Parameters.AddWithValue("@RecordTransferred", courtrecord.RecordTransfer);
+            insertCmd.Parameters.AddWithValue("@RecordCaseStatus", courtrecord.RecordCaseStatus);
+            insertCmd.Parameters.AddWithValue("@RecordNatureCase", courtrecord.RecordNatureCase);
+            insertCmd.Parameters.AddWithValue("@RecordNatureDescription", courtrecord.RecordNatureDescription);
+
+            await insertCmd.ExecuteNonQueryAsync();
+            return Ok("Court record added successfully.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+            return StatusCode(500, "An error occurred while adding the court record.");
+        }
+    }
+
+
+ //--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 
@@ -353,7 +421,71 @@ public class DatabaseController : ControllerBase
         }
     }
 
+    //DeleteCourRecord
+    [HttpDelete("DeleteCourtRecord/{id}")]
+    public async Task<IActionResult> DeleteCourtRecord(int id)
+    {
 
+        if (id <= 0)
+        {
+            return BadRequest("Invalid court record ID.");
+        }
+
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        try
+        {
+            Console.WriteLine($"Attempting to delete court record with ID: {id}");
+
+            // Get the column name from database schema - adjust this if your primary key has a different name
+            string columnName = "id"; // Likely needs to be changed to match your DB schema
+
+            // Verify the actual column name first by querying the schema
+            string schemaQuery = "DESCRIBE COURTRECORD";
+            using var schemaCmd = new MySqlCommand(schemaQuery, con);
+            using var schemaReader = await schemaCmd.ExecuteReaderAsync();
+
+            while (await schemaReader.ReadAsync())
+            {
+                string field = schemaReader.GetString(0);
+                string key = schemaReader.GetString(3);
+                Console.WriteLine($"Column: {field}, Key: {key}");
+                if (key.Equals("PRI", StringComparison.OrdinalIgnoreCase))
+                {
+                    columnName = field;
+                    break;
+                }
+            }
+            schemaReader.Close();
+
+            Console.WriteLine($"Using primary key column: {columnName}");
+
+            // Delete the court record using the correct column name
+            string deleteQuery = $"DELETE FROM COURTRECORD WHERE {columnName} = @Id";
+
+            using var deleteCmd = new MySqlCommand(deleteQuery, con);
+            deleteCmd.Parameters.AddWithValue("@Id", id);
+
+            int rowsAffected = await deleteCmd.ExecuteNonQueryAsync();
+            Console.WriteLine($"Rows affected: {rowsAffected}");
+
+            if (rowsAffected > 0)
+            {
+                return Ok($"Court record with ID {id} deleted successfully.");
+            }
+            else
+            {
+                return NotFound($"Court record with ID {id} not found or could not be deleted.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error deleting court record: {ex.Message}");
+            Console.WriteLine($"Error StackTrace: {ex.StackTrace}");
+            return StatusCode(500, $"An error occurred while deleting the court record: {ex.Message}");
+        }
+    }
     //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
     //UPDATE
@@ -391,6 +523,122 @@ public class DatabaseController : ControllerBase
         return NotFound("No category found with the specified ID.");
     }
 
+    [HttpPut("UpdateCourtRecord/{id}")]
+    public async Task<IActionResult> UpdateCourtRecord(int id, [FromBody] CourtRecorddto courtrecord)
+    {
+        if (id <= 0 || courtrecord == null || string.IsNullOrWhiteSpace(courtrecord.RecordCaseNumber))
+        {
+            return BadRequest("Invalid court record data or ID.");
+        }
+
+        // Ensure the ID in the path matches the ID in the payload or set it explicitly
+        courtrecord.CourtRecordId = id; // Force the ID to match the route parameter
+
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        try
+        {
+            Console.WriteLine($"Attempting to update court record with ID: {id}");
+
+            // Check if the court record exists
+            string checkQuery = "SELECT COUNT(*) FROM COURTRECORD WHERE id = @Id";
+
+            // First, verify the actual primary key column name
+            string columnName = "id"; // Default assumption
+            string schemaQuery = "DESCRIBE COURTRECORD";
+            using var schemaCmd = new MySqlCommand(schemaQuery, con);
+            using var schemaReader = await schemaCmd.ExecuteReaderAsync();
+
+            while (await schemaReader.ReadAsync())
+            {
+                string field = schemaReader.GetString(0);
+                string key = schemaReader.GetString(3);
+                if (key.Equals("PRI", StringComparison.OrdinalIgnoreCase))
+                {
+                    columnName = field;
+                    break;
+                }
+            }
+            schemaReader.Close();
+
+            Console.WriteLine($"Using primary key column: {columnName}");
+
+            // Check if record exists
+            string existsQuery = $"SELECT COUNT(*) FROM COURTRECORD WHERE {columnName} = @Id";
+            using var existsCmd = new MySqlCommand(existsQuery, con);
+            existsCmd.Parameters.AddWithValue("@Id", id);
+
+            var existingCount = Convert.ToInt32(await existsCmd.ExecuteScalarAsync());
+
+            if (existingCount == 0)
+            {
+                return NotFound($"Court record with ID {id} not found.");
+            }
+
+            // Check if the updated case number conflicts with another record
+            string duplicateQuery = $"SELECT COUNT(*) FROM COURTRECORD WHERE rec_Case_Number = @CaseNumber AND {columnName} != @Id";
+            using var duplicateCmd = new MySqlCommand(duplicateQuery, con);
+            duplicateCmd.Parameters.AddWithValue("@CaseNumber", courtrecord.RecordCaseNumber.Trim());
+            duplicateCmd.Parameters.AddWithValue("@Id", id);
+
+            var duplicateCount = Convert.ToInt32(await duplicateCmd.ExecuteScalarAsync());
+
+            if (duplicateCount > 0)
+            {
+                return Conflict("Another court record with the same case number already exists.");
+            }
+
+            // Convert DateOnly to DateTime for MySQL compatibility
+            DateTime occDateTime = new DateTime(courtrecord.RecordDateFiledOCC.Year,
+                                              courtrecord.RecordDateFiledOCC.Month,
+                                              courtrecord.RecordDateFiledOCC.Day);
+
+            DateTime receivedDateTime = new DateTime(courtrecord.RecordDateFiledReceived.Year,
+                                                   courtrecord.RecordDateFiledReceived.Month,
+                                                   courtrecord.RecordDateFiledReceived.Day);
+
+            // Update the court record - ID field is not included in the SET clause
+            string updateQuery = $@"UPDATE COURTRECORD 
+                             SET rec_Case_Number = @CaseNumber,
+                                 rec_Case_Title = @CaseTitle,
+                                 rec_Date_Filed_Occ = @RecordDateFiledOcc,
+                                 rec_Date_Filed_Received = @RecordDateFiledReceived,
+                                 rec_Transferred = @RecordTransferred,
+                                 rec_Case_Status = @RecordCaseStatus,
+                                 rec_Nature_Case = @RecordNatureCase,
+                                 rec_Nature_Descrip = @RecordNatureDescription
+                             WHERE {columnName} = @Id";
+
+            using var updateCmd = new MySqlCommand(updateQuery, con);
+            updateCmd.Parameters.AddWithValue("@Id", id);
+            updateCmd.Parameters.AddWithValue("@CaseNumber", courtrecord.RecordCaseNumber.Trim());
+            updateCmd.Parameters.AddWithValue("@CaseTitle", courtrecord.RecordCaseTitle);
+            updateCmd.Parameters.AddWithValue("@RecordDateFiledOcc", occDateTime);
+            updateCmd.Parameters.AddWithValue("@RecordDateFiledReceived", receivedDateTime);
+            updateCmd.Parameters.AddWithValue("@RecordTransferred", courtrecord.RecordTransfer);
+            updateCmd.Parameters.AddWithValue("@RecordCaseStatus", courtrecord.RecordCaseStatus);
+            updateCmd.Parameters.AddWithValue("@RecordNatureCase", courtrecord.RecordNatureCase);
+            updateCmd.Parameters.AddWithValue("@RecordNatureDescription", courtrecord.RecordNatureDescription);
+
+            int rowsAffected = await updateCmd.ExecuteNonQueryAsync();
+
+            if (rowsAffected > 0)
+            {
+                return Ok($"Court record with ID {id} updated successfully.");
+            }
+            else
+            {
+                return StatusCode(500, "Failed to update the court record.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error updating court record: {ex.Message}");
+            Console.WriteLine($"Error StackTrace: {ex.StackTrace}");
+            return StatusCode(500, $"An error occurred while updating the court record: {ex.Message}");
+        }
+    }
 
     //------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -424,6 +672,8 @@ public class DatabaseController : ControllerBase
         return Ok(users);
     }
 
+
+    //Get Categories DATAGRIDVIEW from the dashboards
     [HttpGet("GetCategories")]
     public async Task<IActionResult> GetCategories()
     {
@@ -450,6 +700,127 @@ public class DatabaseController : ControllerBase
         return Ok(categories);
     }
 
+
+ //GET Tasks DATAGRIDVIEW from the Dashboard and Schedules
+
+    [HttpGet("GetTasks")]
+    public async Task<IActionResult> GetTasks()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = "SELECT sched_Id, sched_taskTitle, sched_taskDescription, sched_date, sched_status FROM Tasks";
+        using var cmd = new MySqlCommand(query, con);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+
+        var categories = new List<Tasksdto>();
+        while (await reader.ReadAsync())
+        {
+            categories.Add(new Tasksdto
+            {
+                ScheduleId = Convert.ToInt32(reader["sched_Id"]), // Make sure user_Id is included
+                ScheduleTaskTitle = reader["sched_taskTitle"]?.ToString(),
+                ScheduleTaskDescription = reader["sched_taskDescription"]?.ToString(),
+                ScheduleDate = reader["sched_date"] == DBNull.Value ? default : Convert.ToDateTime(reader["sched_date"]),
+                ScheduleStatus = reader["sched_status"]?.ToString()
+            });
+        }
+
+        return Ok(categories);
+    }
+
+    [HttpGet("GetHearing")]
+    public async Task<IActionResult> GetHearing()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = "SELECT hearing_Id, hearing_Case_Title, hearing_Case_Num, hearing_Case_Date, hearing_case_status FROM Hearing";
+        using var cmd = new MySqlCommand(query, con);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+
+        var categories = new List<Hearingdto>();
+        while (await reader.ReadAsync())
+        {
+            categories.Add(new Hearingdto
+            {
+                HearingId = Convert.ToInt32(reader["hearing_Id"]), // Make sure user_Id is included
+                HearingCaseTitle = reader["hearing_Case_Title"]?.ToString(),
+                HearingCaseNumber = reader["hearing_Case_Num"]?.ToString(),
+                HearingCaseDate = reader["hearing_Case_Date"] == DBNull.Value ? default : Convert.ToDateTime(reader["hearing_Case_Date"]),
+                HearingCaseStatus = reader["hearing_case_status"]?.ToString()
+            });
+        }
+
+        return Ok(categories);
+    }
+
+    [HttpGet("GetCourtRecords")]
+    public async Task<IActionResult> GetCourtRecords()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        try
+        {
+            // First, verify the actual primary key column name to ensure correct mapping
+            string idColumnName = "id"; // Default assumption
+            string schemaQuery = "DESCRIBE COURTRECORD";
+            using var schemaCmd = new MySqlCommand(schemaQuery, con);
+            using var schemaReader = await schemaCmd.ExecuteReaderAsync();
+
+            while (await schemaReader.ReadAsync())
+            {
+                string field = schemaReader.GetString(0);
+                string key = schemaReader.GetString(3);
+                if (key.Equals("PRI", StringComparison.OrdinalIgnoreCase))
+                {
+                    idColumnName = field;
+                    break;
+                }
+            }
+            schemaReader.Close();
+
+            string query = $@"SELECT {idColumnName}, rec_Case_Number, rec_Case_Title, rec_Date_Filed_Occ, 
+                               rec_Date_Filed_Received, rec_Transferred, rec_Case_Status, 
+                               rec_Nature_Case, rec_Nature_Descrip 
+                        FROM COURTRECORD";
+
+            using var cmd = new MySqlCommand(query, con);
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            var courtRecords = new List<CourtRecorddto>();
+
+            while (await reader.ReadAsync())
+            {
+                courtRecords.Add(new CourtRecorddto
+                {
+                    CourtRecordId = Convert.ToInt32(reader[idColumnName]),
+                    RecordCaseNumber = reader["rec_Case_Number"]?.ToString(),
+                    RecordCaseTitle = reader["rec_Case_Title"]?.ToString(),
+                    RecordDateFiledOCC = reader["rec_Date_Filed_Occ"] == DBNull.Value
+                        ? default
+                        : DateOnly.FromDateTime(Convert.ToDateTime(reader["rec_Date_Filed_Occ"])),
+                    RecordDateFiledReceived = reader["rec_Date_Filed_Received"] == DBNull.Value
+                        ? default
+                        : DateOnly.FromDateTime(Convert.ToDateTime(reader["rec_Date_Filed_Received"])),
+                    RecordTransfer = reader["rec_Transferred"]?.ToString(),
+                    RecordCaseStatus = reader["rec_Case_Status"]?.ToString(),
+                    RecordNatureCase = reader["rec_Nature_Case"]?.ToString(),
+                    RecordNatureDescription = reader["rec_Nature_Descrip"]?.ToString()
+                });
+            }
+
+            return Ok(courtRecords);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error retrieving court records: {ex.Message}");
+            return StatusCode(500, "An error occurred while retrieving court records.");
+        }
+    }
     //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
     // IN DASHBOARD COUNT USERS
@@ -460,6 +831,48 @@ public class DatabaseController : ControllerBase
         await con.OpenAsync();
 
         string query = "SELECT COUNT(*) FROM ManageUsers";
+        using var cmd = new MySqlCommand(query, con);
+
+        try
+        {
+            int userCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+            return Ok(userCount);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
+
+    // IN DASHBOARD COUNT TASKS
+    [HttpGet("CountTasks")]
+    public async Task<IActionResult> CountTasks()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = "SELECT COUNT(*) FROM Tasks";
+        using var cmd = new MySqlCommand(query, con);
+
+        try
+        {
+            int userCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+            return Ok(userCount);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
+
+    // IN DASHBOARD COUNT HEARINGS
+    [HttpGet("CountHearings")]
+    public async Task<IActionResult> CountHearings()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = "SELECT COUNT(*) FROM Hearing";
         using var cmd = new MySqlCommand(query, con);
 
         try
@@ -524,4 +937,17 @@ public class Hearingdto
     public string HearingCaseNumber { get; set; }
     public DateTime HearingCaseDate { get; set; }
     public string HearingCaseStatus { get; set; }
+}
+
+public class CourtRecorddto
+{
+    public int CourtRecordId { get; set; }
+    public string RecordCaseNumber { get; set; }
+    public string RecordCaseTitle { get; set; }
+    public DateOnly RecordDateFiledOCC { get; set; }
+    public DateOnly RecordDateFiledReceived { get; set; }
+    public string RecordTransfer { get; set; }
+    public string RecordCaseStatus { get; set; }
+    public string RecordNatureCase { get; set; }
+    public string RecordNatureDescription { get; set; }
 }
