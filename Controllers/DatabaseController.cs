@@ -114,7 +114,117 @@ public class DatabaseController : ControllerBase
         return Ok("Category added successfully.");
     }
 
+    //ADD COURTRECORD
 
+    [HttpPost("AddTasks")]
+    public async Task<IActionResult> AddTasks([FromBody] Tasksdto tasks)
+    {
+        if (tasks == null || string.IsNullOrWhiteSpace(tasks.ScheduleTaskTitle))
+        {
+            return BadRequest("Invalid Task data.");
+        }
+
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        try
+        {
+            Console.WriteLine($"Incoming Task: Title={tasks.ScheduleTaskTitle}, Date={tasks.ScheduleDate:yyyy-MM-dd}, Time={tasks.ScheduleDate:HH:mm:ss}");
+
+            // Direct check for task with same title AND date - simplified query
+            string checkQuery = @"SELECT COUNT(*) FROM Tasks 
+                             WHERE sched_taskTitle = @TaskTitle 
+                             AND DATE(sched_date) = DATE(@Date)";
+
+            using var checkCmd = new MySqlCommand(checkQuery, con);
+            checkCmd.Parameters.AddWithValue("@TaskTitle", tasks.ScheduleTaskTitle.Trim());
+            checkCmd.Parameters.AddWithValue("@Date", tasks.ScheduleDate);
+
+            var existingCount = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
+            Console.WriteLine($"Existing Task Count for same title and date: {existingCount}");
+
+            if (existingCount > 0)
+            {
+                return Conflict("A task with the same title and date already exists.");
+            }
+
+            // Insert new task
+            string insertQuery = @"INSERT INTO Tasks (sched_taskTitle, sched_taskDescription, sched_date, sched_status)
+                           VALUES (@TaskTitle, @TaskDescription, @Date, @Status)";
+
+            using var insertCmd = new MySqlCommand(insertQuery, con);
+            insertCmd.Parameters.AddWithValue("@TaskTitle", tasks.ScheduleTaskTitle.Trim());
+            insertCmd.Parameters.AddWithValue("@TaskDescription", tasks.ScheduleTaskDescription);
+            insertCmd.Parameters.AddWithValue("@Date", tasks.ScheduleDate);
+            insertCmd.Parameters.AddWithValue("@Status", tasks.ScheduleStatus);
+
+            await insertCmd.ExecuteNonQueryAsync();
+            return Ok("Task added successfully.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+            return StatusCode(500, "An error occurred while adding the task.");
+        }
+    }
+
+    // HEARING
+
+
+    [HttpPost("AddHearing")]
+    public async Task<IActionResult> AddHearing([FromBody] Hearingdto hearing)
+    {
+         if (hearing == null || string.IsNullOrWhiteSpace(hearing.HearingCaseTitle) || 
+        string.IsNullOrWhiteSpace(hearing.HearingCaseNumber))
+    {
+        return BadRequest("Invalid Hearing data.");
+    }
+    
+    using var con = new MySqlConnection(_connectionString);
+    await con.OpenAsync();
+    
+    try
+    {
+        Console.WriteLine($"Incoming Hearing: Title={hearing.HearingCaseTitle}, Number={hearing.HearingCaseNumber}, Date={hearing.HearingCaseDate:yyyy-MM-dd},  Date={hearing.HearingCaseDate:HH:mm:ss}");
+        
+        // Check if a hearing with the same title and case number already exists on the same date
+        string checkQuery = @"SELECT COUNT(*) FROM Hearing 
+                             WHERE hearing_Case_Title = @CaseTitle 
+                             AND hearing_Case_Num = @CaseNumber
+                             AND DATE(hearing_Case_Date) = DATE(@CaseDate)";
+        
+        using var checkCmd = new MySqlCommand(checkQuery, con);
+        checkCmd.Parameters.AddWithValue("@CaseTitle", hearing.HearingCaseTitle.Trim());
+        checkCmd.Parameters.AddWithValue("@CaseNumber", hearing.HearingCaseNumber.Trim());
+        checkCmd.Parameters.AddWithValue("@CaseDate", hearing.HearingCaseDate);
+        
+        var existingCount = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
+        Console.WriteLine($"Existing Hearing Count for same title, number and date: {existingCount}");
+        
+        if (existingCount > 0)
+        {
+            return Conflict("A hearing with the same title, case number and date already exists.");
+        }
+        
+        // Insert new hearing
+        string insertQuery = @"INSERT INTO Hearing (hearing_Case_Title, hearing_Case_Num, hearing_Case_Date, hearing_case_status)
+                           VALUES (@CaseTitle, @CaseNumber, @CaseDate, @CaseStatus)";
+        
+        using var insertCmd = new MySqlCommand(insertQuery, con);
+        insertCmd.Parameters.AddWithValue("@CaseTitle", hearing.HearingCaseTitle.Trim());
+        insertCmd.Parameters.AddWithValue("@CaseNumber", hearing.HearingCaseNumber.Trim());
+        insertCmd.Parameters.AddWithValue("@CaseDate", hearing.HearingCaseDate);
+        insertCmd.Parameters.AddWithValue("@CaseStatus", hearing.HearingCaseStatus);
+        
+        await insertCmd.ExecuteNonQueryAsync();
+        return Ok("Hearing added successfully.");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error: {ex.Message}");
+        return StatusCode(500, "An error occurred while adding the hearing.");
+    }
+    }
 
 
     //--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -182,6 +292,67 @@ public class DatabaseController : ControllerBase
             return NotFound("No category found with the selected ID.");
         }
     }
+
+    //DeleteHearing 
+    [HttpDelete("DeleteHearing/{id}")]
+    public async Task<IActionResult> DeleteHearing(int id)
+    {
+        Console.WriteLine($"DeleteHearing called with ID: {id}"); // Log when the route is hit
+
+        if (id <= 0)
+        {
+            return BadRequest("Invalid hearing ID.");
+        }
+
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string deleteQuery = "DELETE FROM Hearing WHERE hearing_Id = @HearingId";
+        using var deleteCmd = new MySqlCommand(deleteQuery, con);
+        deleteCmd.Parameters.AddWithValue("@HearingId", id);
+
+        int rowsAffected = await deleteCmd.ExecuteNonQueryAsync();
+
+        if (rowsAffected > 0)
+        {
+            return Ok("Hearing has been deleted successfully.");
+        }
+        else
+        {
+            return NotFound("No hearing found with the selected ID.");
+        }
+    }
+
+    //DeleteTask
+    [HttpDelete("Deletetasks/{id}")]
+    public async Task<IActionResult> Deletetasks(int id)
+    {
+        Console.WriteLine($"DeleteTask called with ID: {id}"); // Log when the route is hit
+
+        if (id <= 0)
+        {
+            return BadRequest("Invalid task ID.");
+        }
+
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string deleteQuery = "DELETE FROM Tasks WHERE sched_Id = @ScheduleId";
+        using var deleteCmd = new MySqlCommand(deleteQuery, con);
+        deleteCmd.Parameters.AddWithValue("@ScheduleId", id);
+
+        int rowsAffected = await deleteCmd.ExecuteNonQueryAsync();
+
+        if (rowsAffected > 0)
+        {
+            return Ok("Task has been deleted successfully.");
+        }
+        else
+        {
+            return NotFound("No Task found with the selected ID.");
+        }
+    }
+
 
     //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -336,4 +507,21 @@ public class Categorydto
     public string CategoryLegalCase { get; set; }
     public string CategoryRepublicAct { get; set; }
     public string CategoryNatureCase { get; set; }
+}
+
+public class Tasksdto
+{
+    public int ScheduleId { get; set; }
+    public string ScheduleTaskTitle { get; set; }
+    public string ScheduleTaskDescription { get; set; }
+    public DateTime ScheduleDate { get; set; }
+    public string ScheduleStatus { get; set; }
+}
+public class Hearingdto
+{
+    public int HearingId { get; set; }
+    public string HearingCaseTitle { get; set; }
+    public string HearingCaseNumber { get; set; }
+    public DateTime HearingCaseDate { get; set; }
+    public string HearingCaseStatus { get; set; }
 }
