@@ -42,12 +42,7 @@ public class DatabaseController : ControllerBase
     }
 
 
-
-
-
     //----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-
 
     // ADD User IN MANAGE USERS
 
@@ -174,56 +169,56 @@ public class DatabaseController : ControllerBase
     [HttpPost("AddHearing")]
     public async Task<IActionResult> AddHearing([FromBody] Hearingdto hearing)
     {
-         if (hearing == null || string.IsNullOrWhiteSpace(hearing.HearingCaseTitle) || 
-        string.IsNullOrWhiteSpace(hearing.HearingCaseNumber))
-    {
-        return BadRequest("Invalid Hearing data.");
-    }
-    
-    using var con = new MySqlConnection(_connectionString);
-    await con.OpenAsync();
-    
-    try
-    {
-        Console.WriteLine($"Incoming Hearing: Title={hearing.HearingCaseTitle}, Number={hearing.HearingCaseNumber}, Date={hearing.HearingCaseDate:yyyy-MM-dd},  Date={hearing.HearingCaseDate:HH:mm:ss}");
-        
-        // Check if a hearing with the same title and case number already exists on the same date
-        string checkQuery = @"SELECT COUNT(*) FROM Hearing 
+        if (hearing == null || string.IsNullOrWhiteSpace(hearing.HearingCaseTitle) ||
+       string.IsNullOrWhiteSpace(hearing.HearingCaseNumber))
+        {
+            return BadRequest("Invalid Hearing data.");
+        }
+
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        try
+        {
+            Console.WriteLine($"Incoming Hearing: Title={hearing.HearingCaseTitle}, Number={hearing.HearingCaseNumber}, Date={hearing.HearingCaseDate:yyyy-MM-dd},  Date={hearing.HearingCaseDate:HH:mm:ss}");
+
+            // Check if a hearing with the same title and case number already exists on the same date
+            string checkQuery = @"SELECT COUNT(*) FROM Hearing 
                              WHERE hearing_Case_Title = @CaseTitle 
                              AND hearing_Case_Num = @CaseNumber
                              AND DATE(hearing_Case_Date) = DATE(@CaseDate)";
-        
-        using var checkCmd = new MySqlCommand(checkQuery, con);
-        checkCmd.Parameters.AddWithValue("@CaseTitle", hearing.HearingCaseTitle.Trim());
-        checkCmd.Parameters.AddWithValue("@CaseNumber", hearing.HearingCaseNumber.Trim());
-        checkCmd.Parameters.AddWithValue("@CaseDate", hearing.HearingCaseDate);
-        
-        var existingCount = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
-        Console.WriteLine($"Existing Hearing Count for same title, number and date: {existingCount}");
-        
-        if (existingCount > 0)
-        {
-            return Conflict("A hearing with the same title, case number and date already exists.");
-        }
-        
-        // Insert new hearing
-        string insertQuery = @"INSERT INTO Hearing (hearing_Case_Title, hearing_Case_Num, hearing_Case_Date, hearing_case_status)
+
+            using var checkCmd = new MySqlCommand(checkQuery, con);
+            checkCmd.Parameters.AddWithValue("@CaseTitle", hearing.HearingCaseTitle.Trim());
+            checkCmd.Parameters.AddWithValue("@CaseNumber", hearing.HearingCaseNumber.Trim());
+            checkCmd.Parameters.AddWithValue("@CaseDate", hearing.HearingCaseDate);
+
+            var existingCount = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
+            Console.WriteLine($"Existing Hearing Count for same title, number and date: {existingCount}");
+
+            if (existingCount > 0)
+            {
+                return Conflict("A hearing with the same title, case number and date already exists.");
+            }
+
+            // Insert new hearing
+            string insertQuery = @"INSERT INTO Hearing (hearing_Case_Title, hearing_Case_Num, hearing_Case_Date, hearing_case_status)
                            VALUES (@CaseTitle, @CaseNumber, @CaseDate, @CaseStatus)";
-        
-        using var insertCmd = new MySqlCommand(insertQuery, con);
-        insertCmd.Parameters.AddWithValue("@CaseTitle", hearing.HearingCaseTitle.Trim());
-        insertCmd.Parameters.AddWithValue("@CaseNumber", hearing.HearingCaseNumber.Trim());
-        insertCmd.Parameters.AddWithValue("@CaseDate", hearing.HearingCaseDate);
-        insertCmd.Parameters.AddWithValue("@CaseStatus", hearing.HearingCaseStatus);
-        
-        await insertCmd.ExecuteNonQueryAsync();
-        return Ok("Hearing added successfully.");
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Error: {ex.Message}");
-        return StatusCode(500, "An error occurred while adding the hearing.");
-    }
+
+            using var insertCmd = new MySqlCommand(insertQuery, con);
+            insertCmd.Parameters.AddWithValue("@CaseTitle", hearing.HearingCaseTitle.Trim());
+            insertCmd.Parameters.AddWithValue("@CaseNumber", hearing.HearingCaseNumber.Trim());
+            insertCmd.Parameters.AddWithValue("@CaseDate", hearing.HearingCaseDate);
+            insertCmd.Parameters.AddWithValue("@CaseStatus", hearing.HearingCaseStatus);
+
+            await insertCmd.ExecuteNonQueryAsync();
+            return Ok("Hearing added successfully.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+            return StatusCode(500, "An error occurred while adding the hearing.");
+        }
     }
 
     //CourtRecord
@@ -295,7 +290,44 @@ public class DatabaseController : ControllerBase
     }
 
 
- //--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    [HttpPost("AddDirectory")]
+    public async Task<IActionResult> AddDirectory([FromBody] DirectoryDto directory)
+    {
+        if (directory == null || string.IsNullOrWhiteSpace(directory.DirectoryName))
+        {
+            return BadRequest("Invalid user data.");
+        }
+
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        // Check if username already exists
+        string checkQuery = "SELECT COUNT(*) FROM Directory WHERE direct_name = @DirectoryName";
+        using var checkCmd = new MySqlCommand(checkQuery, con);
+        checkCmd.Parameters.AddWithValue("@DirectoryName", directory.DirectoryName);
+        int userCount = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
+
+        if (userCount > 0)
+        {
+            return Conflict("That name already exists.");
+        }
+
+        // Insert new user
+        string insertQuery = @"INSERT INTO Directory (direct_name, direct_position, direct_contact, direct_email, direct_status)
+                              VALUES (@DirectoryName, @DirectoryPosition, @DirectoryContact, @DirectoryEmail, @DirectoryStatus)";
+        using var insertCmd = new MySqlCommand(insertQuery, con);
+        insertCmd.Parameters.AddWithValue("@DirectoryName", directory.DirectoryName);
+        insertCmd.Parameters.AddWithValue("@DirectoryPosition", directory.DirectoryPosition);
+        insertCmd.Parameters.AddWithValue("@DirectoryContact", directory.DirectoryContact);
+        insertCmd.Parameters.AddWithValue("@DirectoryEmail", directory.DirectoryEmail);
+        insertCmd.Parameters.AddWithValue("@DirectoryStatus", directory.DirectoryStatus);
+
+        await insertCmd.ExecuteNonQueryAsync();
+
+        return Ok("User added successfully.");
+    }
+
+    //--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 
@@ -329,7 +361,7 @@ public class DatabaseController : ControllerBase
             return NotFound("No user found with the selected ID.");
         }
     }
-    
+
     //DELETE IN CATEGORY
 
     [HttpDelete("DeleteCategory/{id}")]
@@ -486,10 +518,86 @@ public class DatabaseController : ControllerBase
             return StatusCode(500, $"An error occurred while deleting the court record: {ex.Message}");
         }
     }
+
+
+    [HttpDelete("DeleteDirectory/{id}")]
+    public async Task<IActionResult> DeleteDirectory(int id)
+    {
+        Console.WriteLine($"DeleteName called with ID: {id}"); // Log when the route is hit
+
+        if (id <= 0)
+        {
+            return BadRequest("Invalid name ID.");
+        }
+
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string deleteQuery = "DELETE FROM Directory WHERE directory_Id  = @DirectoryId";
+        using var deleteCmd = new MySqlCommand(deleteQuery, con);
+        deleteCmd.Parameters.AddWithValue("@DirectoryId", id);
+
+        int rowsAffected = await deleteCmd.ExecuteNonQueryAsync();
+
+        if (rowsAffected > 0)
+        {
+            return Ok("User has been deleted successfully.");
+        }
+        else
+        {
+            return NotFound("No user found with the selected ID.");
+        }
+    }
+
     //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-    //UPDATE
+    //UPDATE 
 
+
+    //Users EDIT
+
+    [HttpPut("UserEdit/{id}")]
+    public async Task<IActionResult> UserEdit(int id, [FromBody] UserDto user)
+    {
+        if (id <= 0 || user == null || string.IsNullOrWhiteSpace(user.UserName))
+        {
+            return BadRequest("Invalid user data.");
+        }
+
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        // Fixed the query syntax
+        string updateQuery = @"UPDATE ManageUsers 
+                          SET user_Fname = @FirstName,
+                              user_Lname = @LastName,
+                              user_Role = @Role,
+                              user_Status = @Status,
+                              user_Name = @UserName,
+                              user_Pass = @Password
+                          WHERE user_Id = @Id";
+
+        using var updateCmd = new MySqlCommand(updateQuery, con);
+        updateCmd.Parameters.AddWithValue("@FirstName", user.FirstName);
+        updateCmd.Parameters.AddWithValue("@LastName", user.LastName);
+        updateCmd.Parameters.AddWithValue("@Role", user.Role);
+        updateCmd.Parameters.AddWithValue("@Status", user.Status);
+        updateCmd.Parameters.AddWithValue("@UserName", user.UserName);
+        updateCmd.Parameters.AddWithValue("@Password", user.Password);
+        updateCmd.Parameters.AddWithValue("@Id", id);
+
+        int rowsAffected = await updateCmd.ExecuteNonQueryAsync();
+
+        if (rowsAffected > 0)
+        {
+            return Ok("User updated successfully.");
+        }
+
+        return NotFound("No user found with the specified ID.");
+    }
+
+
+    //Categories EDIT
     [HttpPut("EditCategory/{id}")]
     public async Task<IActionResult> EditCategory(int id, [FromBody] Categorydto category)
     {
@@ -523,6 +631,7 @@ public class DatabaseController : ControllerBase
         return NotFound("No category found with the specified ID.");
     }
 
+    //UpdateCourtRecord
     [HttpPut("UpdateCourtRecord/{id}")]
     public async Task<IActionResult> UpdateCourtRecord(int id, [FromBody] CourtRecorddto courtrecord)
     {
@@ -640,6 +749,47 @@ public class DatabaseController : ControllerBase
         }
     }
 
+
+    //UPDATEDIRECTORY
+    [HttpPut("DirectoryEdit/{id}")]
+    public async Task<IActionResult> DirectoryEdit(int id, [FromBody] DirectoryDto directory)
+    {
+        if (id <= 0 || directory == null || string.IsNullOrWhiteSpace(directory.DirectoryName))
+        {
+            return BadRequest("Invalid user data.");
+        }
+
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        // Fixed the query syntax
+        string updateQuery = @"UPDATE Directory 
+                          SET direct_name = @DirectoryName,
+                              direct_position = @DirectoryPosition,
+                              direct_contact = @DirectoryContact,
+                              direct_email = @DirectoryEmail,
+                              direct_status = @DirectoryStatus
+                          WHERE directory_Id  = @Id";
+
+        using var updateCmd = new MySqlCommand(updateQuery, con);
+        updateCmd.Parameters.AddWithValue("@DirectoryName", directory.DirectoryName);
+        updateCmd.Parameters.AddWithValue("@DirectoryPosition", directory.DirectoryPosition);
+        updateCmd.Parameters.AddWithValue("@DirectoryContact", directory.DirectoryContact);
+        updateCmd.Parameters.AddWithValue("@DirectoryEmail", directory.DirectoryEmail);
+        updateCmd.Parameters.AddWithValue("@DirectoryStatus", directory.DirectoryStatus);
+        updateCmd.Parameters.AddWithValue("@Id", id);
+
+        int rowsAffected = await updateCmd.ExecuteNonQueryAsync();
+
+        if (rowsAffected > 0)
+        {
+            return Ok("User updated successfully.");
+        }
+
+        return NotFound("No user found with the specified ID.");
+    }
+
+
     //------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
     //DATAGRIDVIEW GET USERS
@@ -701,7 +851,7 @@ public class DatabaseController : ControllerBase
     }
 
 
- //GET Tasks DATAGRIDVIEW from the Dashboard and Schedules
+    //GET Tasks DATAGRIDVIEW from the Dashboard and Schedules
 
     [HttpGet("GetTasks")]
     public async Task<IActionResult> GetTasks()
@@ -886,6 +1036,150 @@ public class DatabaseController : ControllerBase
         }
     }
 
+    //Count Active Case Records
+
+    [HttpGet("CountCaseRecordsActive")]
+    public async Task<IActionResult> CountCaseRecords()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = "SELECT COUNT(*) FROM COURTRECORD WHERE rec_Case_Status IN ('Active', 'Archived')";
+        using var cmd = new MySqlCommand(query, con);
+
+        try
+        {
+            int userCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+            return Ok(userCount);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
+
+    //Count Disposed Case Records
+    [HttpGet("CountCaseRecordsDisposed")]
+    public async Task<IActionResult> CountCaseRecordsDisposed()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = "SELECT COUNT(*) FROM COURTRECORD WHERE rec_Case_Status IN ('Disposed')";
+        using var cmd = new MySqlCommand(query, con);
+
+        try
+        {
+            int userCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+            return Ok(userCount);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
+
+    //Count Archived Case Records
+    [HttpGet("CountCaseRecordsArchived")]
+    public async Task<IActionResult> CountCaseRecordsArchived()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = "SELECT COUNT(*) FROM COURTRECORD WHERE rec_Case_Status IN ('Archived')";
+        using var cmd = new MySqlCommand(query, con);
+
+        try
+        {
+            int userCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+            return Ok(userCount);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
+
+    //Notifications Counts
+    [HttpGet("NotificationCounts")]
+    public async Task<IActionResult> GetNotificationCount()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = @"SELECT COUNT(*) FROM (
+                        SELECT sched_Id FROM Tasks
+                        WHERE CAST(sched_date AS DATE) = CAST(CURDATE() AS DATE)
+                        AND TRIM(sched_status) = 'Pending'
+                        UNION ALL
+                        SELECT hearing_Id FROM Hearing
+                        WHERE CAST(hearing_Case_Date AS DATE) = CAST(CURDATE() AS DATE)
+                        AND TRIM(hearing_case_status) = 'Pending'
+                    ) AS CombinedCount";
+
+        using var cmd = new MySqlCommand(query, con);
+
+        try
+        {
+            int notificationCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+            return Ok(notificationCount);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
+
+    //Notifications DATA
+    [HttpGet("NotificationsData")]
+    public async Task<IActionResult> GetNotificationDetails()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = @"SELECT 
+                        sched_taskTitle AS Title,
+                        sched_taskDescription AS Description,
+                        TRIM(sched_status) AS Status
+                    FROM Tasks 
+                    WHERE CAST(sched_date AS DATE) = CAST(CURDATE() AS DATE)
+                    AND TRIM(sched_status) = 'Pending'
+
+                    UNION ALL
+
+                    SELECT 
+                        TRIM(hearing_Case_Title) AS Title,
+                        TRIM(hearing_Case_Num) AS Description,
+                        TRIM(hearing_case_status) AS Status
+                    FROM Hearing 
+                    WHERE CAST(hearing_Case_Date AS DATE) = CAST(CURDATE() AS DATE)
+                    AND TRIM(hearing_case_status) = 'Pending'";
+
+        using var cmd = new MySqlCommand(query, con);
+
+        try
+        {
+            using var reader = await cmd.ExecuteReaderAsync();
+            var results = new List<object>();
+
+            while (await reader.ReadAsync())
+            {
+                results.Add(new
+                {
+                    Title = reader["Title"].ToString(),
+                    Description = reader["Description"].ToString(),
+                    Status = reader["Status"].ToString()
+                });
+            }
+
+            return Ok(results);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
+
 }
 
 
@@ -950,4 +1244,14 @@ public class CourtRecorddto
     public string RecordCaseStatus { get; set; }
     public string RecordNatureCase { get; set; }
     public string RecordNatureDescription { get; set; }
+}
+
+public class DirectoryDto
+{
+    public int DirectoryId { get; set; }
+    public string DirectoryName { get; set; }
+    public string DirectoryPosition { get; set; }
+    public string DirectoryContact { get; set; }
+    public string DirectoryEmail { get; set; }
+    public string DirectoryStatus { get; set; }
 }
