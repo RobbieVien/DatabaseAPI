@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using System.Data;
 using System.Text.Json.Serialization;
 using Dapper;
+using Mysqlx.Crud;
 
 [Route("api/[controller]")]
 [ApiController]
@@ -167,29 +168,29 @@ public class DatabaseController : ControllerBase
     }
 
     // HEARING
-
-
     [HttpPost("AddHearing")]
     public async Task<IActionResult> AddHearing([FromBody] Hearingdto hearing)
     {
         if (hearing == null || string.IsNullOrWhiteSpace(hearing.HearingCaseTitle) ||
-       string.IsNullOrWhiteSpace(hearing.HearingCaseNumber))
+            string.IsNullOrWhiteSpace(hearing.HearingCaseNumber))
         {
             return BadRequest("Invalid Hearing data.");
         }
+
+        hearing.HearingCaseDate = DateTime.Now.ToString("yyyy-MM-dd");
+        hearing.HearingCaseTime = DateTime.Now.ToString("HH:mm:ss");
 
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
 
         try
         {
-            Console.WriteLine($"Incoming Hearing: Title={hearing.HearingCaseTitle}, Number={hearing.HearingCaseNumber}, Date={hearing.HearingCaseDate:yyyy-MM-dd},  Date={hearing.HearingCaseDate:HH:mm:ss}");
+            Console.WriteLine($"Incoming Hearing: Title={hearing.HearingCaseTitle}, Number={hearing.HearingCaseNumber}, Date={hearing.HearingCaseDate}, Time={hearing.HearingCaseTime}");
 
-            // Check if a hearing with the same title and case number already exists on the same date
             string checkQuery = @"SELECT COUNT(*) FROM Hearing 
-                             WHERE hearing_Case_Title = @CaseTitle 
-                             AND hearing_Case_Num = @CaseNumber
-                             AND DATE(hearing_Case_Date) = DATE(@CaseDate)";
+                              WHERE hearing_Case_Title = @CaseTitle 
+                              AND hearing_Case_Num = @CaseNumber
+                              AND DATE(hearing_Case_Date) = @CaseDate";
 
             using var checkCmd = new MySqlCommand(checkQuery, con);
             checkCmd.Parameters.AddWithValue("@CaseTitle", hearing.HearingCaseTitle.Trim());
@@ -204,14 +205,14 @@ public class DatabaseController : ControllerBase
                 return Conflict("A hearing with the same title, case number and date already exists.");
             }
 
-            // Insert new hearing
-            string insertQuery = @"INSERT INTO Hearing (hearing_Case_Title, hearing_Case_Num, hearing_Case_Date, hearing_case_status)
-                           VALUES (@CaseTitle, @CaseNumber, @CaseDate, @CaseStatus)";
+            string insertQuery = @"INSERT INTO Hearing (hearing_Case_Title, hearing_Case_Num, hearing_Case_Date, hearing_Case_Time, hearing_case_status)
+                              VALUES (@CaseTitle, @CaseNumber, @CaseDate, @CaseTime, @CaseStatus)";
 
             using var insertCmd = new MySqlCommand(insertQuery, con);
             insertCmd.Parameters.AddWithValue("@CaseTitle", hearing.HearingCaseTitle.Trim());
             insertCmd.Parameters.AddWithValue("@CaseNumber", hearing.HearingCaseNumber.Trim());
             insertCmd.Parameters.AddWithValue("@CaseDate", hearing.HearingCaseDate);
+            insertCmd.Parameters.AddWithValue("@CaseTime", hearing.HearingCaseTime);
             insertCmd.Parameters.AddWithValue("@CaseStatus", hearing.HearingCaseStatus);
 
             await insertCmd.ExecuteNonQueryAsync();
@@ -223,10 +224,6 @@ public class DatabaseController : ControllerBase
             return StatusCode(500, "An error occurred while adding the hearing.");
         }
     }
-
-    //CourtRecord
-
-    
 
     [HttpPost("AddDirectory")]
     public async Task<IActionResult> AddDirectory([FromBody] DirectoryDto directory)
@@ -358,6 +355,141 @@ public class DatabaseController : ControllerBase
         }
     }
 
+    [HttpPost("AddNatureCaseColumn")]
+    public async Task<IActionResult> AddNatureCaseColumn()
+    {
+        string addColumnQuery = @"
+        ALTER TABLE Report 
+        ADD COLUMN IF NOT EXISTS Report_NatureCase NCHAR(50) NULL;";
+        try
+        {
+            using (var connection = new MySqlConnection(_connectionString))
+            {
+                await connection.ExecuteAsync(addColumnQuery);
+                return Ok("Column added successfully");
+            }
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
+
+    //Add Foreign Key Constraint to
+    [HttpPost("AddRequiredColumns")]
+    public async Task<IActionResult> AddRequiredColumns()
+    {
+        string addColumnsQuery = @"
+        ALTER TABLE Report 
+        ADD COLUMN IF NOT EXISTS CourtRecord_LinkId INT NULL,
+        ADD COLUMN IF NOT EXISTS CaseCount INT NOT NULL DEFAULT 1;";
+
+        string addForeignKeyQuery = @"
+        ALTER TABLE Report 
+        ADD CONSTRAINT FK_Report_CourtRecord
+        FOREIGN KEY (CourtRecord_LinkId)
+        REFERENCES COURTRECORD (courtRecord_Id);";
+
+        try
+        {
+            using (var connection = new MySqlConnection(_connectionString))
+            {
+                // Add columns
+                await connection.ExecuteAsync(addColumnsQuery);
+
+                // Check if foreign key already exists
+                var checkForeignKeyQuery = @"
+                SELECT CONSTRAINT_NAME
+                FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                WHERE TABLE_NAME = 'Report' AND CONSTRAINT_NAME = 'FK_Report_CourtRecord';";
+                var foreignKeyExists = await connection.QueryFirstOrDefaultAsync<string>(checkForeignKeyQuery);
+
+                // Add foreign key if it doesn't exist
+                if (foreignKeyExists == null)
+                {
+                    await connection.ExecuteAsync(addForeignKeyQuery);
+                }
+
+                return Ok("Required columns and constraints added successfully");
+            }
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
+
+    [HttpPost("PopulateReportTable")]
+    public async Task<IActionResult> PopulateReportTable()
+    {
+        try
+        {
+            using (var connection = new MySqlConnection(_connectionString))
+            {
+                // First, get all available nature cases from COURTRECORD that aren't yet in Report table
+                string selectQuery = @"
+                SELECT cr.rec_Nature_Case, cr.courtRecord_Id
+                FROM COURTRECORD cr
+                WHERE cr.rec_Nature_Case IS NOT NULL
+                AND NOT EXISTS (
+                    SELECT 1 FROM Report r
+                    WHERE r.CourtRecord_LinkId = cr.courtRecord_Id
+                );";
+
+                var records = await connection.QueryAsync<dynamic>(selectQuery);
+                int processedCount = 0;
+
+                foreach (var record in records)
+                {
+                    // Check if this nature case already exists in Report table
+                    string checkExistingQuery = @"
+                    SELECT Report_Id, CaseCount 
+                    FROM Report 
+                    WHERE Report_NatureCase = @natureCase;";
+
+                    var existingReport = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                        checkExistingQuery,
+                        new { natureCase = record.rec_Nature_Case });
+
+                    if (existingReport == null)
+                    {
+                        // Insert new record if nature case doesn't exist
+                        string insertQuery = @"
+                        INSERT INTO Report (Report_NatureCase, CourtRecord_LinkId, CaseCount)
+                        VALUES (@natureCase, @courtRecordId, 1);";
+
+                        await connection.ExecuteAsync(
+                            insertQuery,
+                            new
+                            {
+                                natureCase = record.rec_Nature_Case,
+                                courtRecordId = record.courtRecord_Id
+                            });
+                    }
+                    else
+                    {
+                        // Update existing record to increment the case count
+                        string updateQuery = @"
+                        UPDATE Report
+                        SET CaseCount = CaseCount + 1
+                        WHERE Report_Id = @reportId;";
+
+                        await connection.ExecuteAsync(
+                            updateQuery,
+                            new { reportId = existingReport.Report_Id });
+                    }
+
+                    processedCount++;
+                }
+
+                return Ok($"{processedCount} court records processed. Report table updated with case counts.");
+            }
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
 
     //--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -628,7 +760,6 @@ public class DatabaseController : ControllerBase
         return NotFound("No user found with the specified ID.");
     }
 
-
     //Categories EDIT
     [HttpPut("EditCategory/{id}")]
     public async Task<IActionResult> EditCategory(int id, [FromBody] Categorydto category)
@@ -783,8 +914,6 @@ public class DatabaseController : ControllerBase
         }
     }
 
-
-
     //UPDATEDIRECTORY
     [HttpPut("DirectoryEdit/{id}")]
     public async Task<IActionResult> DirectoryEdit(int id, [FromBody] DirectoryDto directory)
@@ -823,6 +952,71 @@ public class DatabaseController : ControllerBase
 
         return NotFound("No user found with the specified ID.");
     }
+
+    [HttpPut("UpdateCourtHearing/{id}")]
+    public async Task<IActionResult> UpdateCourtHearing(int id, [FromBody] Hearingdto hearing)
+    {
+        Console.WriteLine($"Incoming ID from URL: {id}");
+        Console.WriteLine($"Incoming Hearing ID: {hearing?.HearingId}");
+
+        if (hearing == null)
+        {
+            return BadRequest("Invalid hearing data.");
+        }
+
+        if (hearing.HearingId == 0)
+        {
+            hearing.HearingId = id;
+        }
+
+        if (id != hearing.HearingId)
+        {
+            Console.WriteLine("ID mismatch detected.");
+            return BadRequest("ID mismatch.");
+        }
+
+        string query = @"UPDATE Hearing 
+                     SET hearing_Case_Title = @CaseTitle, 
+                         hearing_Case_Num = @CaseNumber, 
+                         hearing_case_status = @CaseStatus 
+                     WHERE hearing_Id = @HearingId";
+
+        try
+        {
+            using (var connection = new MySqlConnection(_connectionString))
+            {
+                var existingHearing = await connection.QueryFirstOrDefaultAsync<Hearingdto>("SELECT * FROM Hearing WHERE hearing_Id = @HearingId", new { HearingId = id });
+
+                if (existingHearing == null)
+                {
+                    return NotFound("Hearing not found.");
+                }
+
+                var result = await connection.ExecuteAsync(query, new
+                {
+                    CaseTitle = hearing.HearingCaseTitle ?? existingHearing.HearingCaseTitle,
+                    CaseNumber = hearing.HearingCaseNumber ?? existingHearing.HearingCaseNumber,
+                    CaseStatus = hearing.HearingCaseStatus ?? existingHearing.HearingCaseStatus,
+                    HearingId = id
+                });
+
+                if (result > 0)
+                {
+                    return Ok("Hearing updated successfully.");
+                }
+
+                return StatusCode(500, "No changes were made.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+            return StatusCode(500, new { message = $"Error updating hearing: {ex.Message}" });
+        }
+    }
+
+
+
 
 
     //------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -921,28 +1115,103 @@ public class DatabaseController : ControllerBase
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
 
-        string query = "SELECT hearing_Id, hearing_Case_Title, hearing_Case_Num, hearing_Case_Date, hearing_case_status FROM Hearing";
+        string query = "SELECT hearing_Id, hearing_Case_Title, hearing_Case_Num, hearing_Case_Date, hearing_Case_Time, hearing_case_status FROM Hearing";
         using var cmd = new MySqlCommand(query, con);
 
         using var reader = await cmd.ExecuteReaderAsync();
 
-        var categories = new List<Hearingdto>();
+        var hearings = new List<Hearingdto>();
         while (await reader.ReadAsync())
         {
-            categories.Add(new Hearingdto
+            hearings.Add(new Hearingdto
             {
-                HearingId = Convert.ToInt32(reader["hearing_Id"]), // Make sure user_Id is included
+                HearingId = Convert.ToInt32(reader["hearing_Id"]),
                 HearingCaseTitle = reader["hearing_Case_Title"]?.ToString(),
                 HearingCaseNumber = reader["hearing_Case_Num"]?.ToString(),
-                HearingCaseDate = reader["hearing_Case_Date"] == DBNull.Value ? default : Convert.ToDateTime(reader["hearing_Case_Date"]),
+                HearingCaseDate = reader["hearing_Case_Date"]?.ToString() ?? string.Empty,
+                HearingCaseTime = reader["hearing_Case_Time"]?.ToString() ?? string.Empty,
                 HearingCaseStatus = reader["hearing_case_status"]?.ToString()
             });
         }
 
-        return Ok(categories);
+        return Ok(hearings);
     }
 
-   
+    [HttpGet("GetReportData")]
+    public async Task<IActionResult> GetReportData()
+    {
+        try
+        {
+            using (var connection = new MySqlConnection(_connectionString))
+            {
+                await connection.OpenAsync();
+
+                // The INSERT statement cannot be run together with a SELECT in the same query
+                // So we need to split them
+
+                // First, make sure all nature cases from COURTRECORD are in the Report table
+                string insertQuery = @"
+                INSERT INTO Report (Report_NatureCase, CaseCount)
+                SELECT 
+                    cr.rec_Nature_Case, 
+                    COUNT(cr.courtRecord_Id) AS CaseCount
+                FROM COURTRECORD cr
+                WHERE cr.rec_Nature_Case IS NOT NULL
+                    AND NOT EXISTS (
+                        SELECT 1 FROM Report r 
+                        WHERE r.Report_NatureCase = cr.rec_Nature_Case
+                    )
+                GROUP BY cr.rec_Nature_Case;";
+
+                await connection.ExecuteAsync(insertQuery);
+
+                // Update case counts for existing records
+                string updateQuery = @"
+                UPDATE Report r
+                JOIN (
+                    SELECT 
+                        rec_Nature_Case, 
+                        COUNT(courtRecord_Id) AS ActualCount
+                    FROM COURTRECORD
+                    WHERE rec_Nature_Case IS NOT NULL
+                    GROUP BY rec_Nature_Case
+                ) counts ON r.Report_NatureCase = counts.rec_Nature_Case
+                SET r.CaseCount = counts.ActualCount;";
+
+                await connection.ExecuteAsync(updateQuery);
+
+                // Now retrieve the updated report data
+                string selectQuery = @"
+                SELECT 
+                    r.Report_Id,
+                    r.Report_NatureCase,
+                    r.CaseCount,
+                    r.CourtRecord_LinkId
+                FROM Report r
+                ORDER BY r.CaseCount DESC;";
+
+                var results = await connection.QueryAsync(selectQuery);
+                return Ok(results);
+            }
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new
+            {
+                Message = "Error fetching report data",
+                ErrorDetails = ex.Message,
+                InnerException = ex.InnerException?.Message,
+                StackTrace = ex.StackTrace
+            });
+        }
+    }
+
+
+
+
+
+
+
     //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
     // IN DASHBOARD COUNT USERS
@@ -1396,31 +1665,31 @@ public class DatabaseController : ControllerBase
     }
 
     [HttpGet("FilterHearings")]
-    public async Task<IActionResult> FilterHearings(string filter)
+    public async Task<IActionResult> FilterHearings(string All)
     {
         string query;
 
-        switch (filter)
+        switch (All)
         {
             case "Today":
                 query = @"SELECT hearing_Id AS HearingId, hearing_Case_Title AS HearingCaseTitle, 
-                             hearing_Case_Num AS HearingCaseNumber, hearing_Case_Date AS HearingCaseDate, 
-                             hearing_Case_Status AS HearingCaseStatus
-                      FROM Hearing 
-                      WHERE hearing_Case_Date = CURDATE()";
+                         hearing_Case_Num AS HearingCaseNumber, hearing_Case_Date AS HearingCaseDate, 
+                         TIME_FORMAT(hearing_Case_Time, '%H:%i:%s') AS HearingCaseTime, hearing_case_status AS HearingCaseStatus
+                  FROM Hearing 
+                  WHERE hearing_Case_Date = CURDATE()";
                 break;
             case "This Week":
                 query = @"SELECT hearing_Id AS HearingId, hearing_Case_Title AS HearingCaseTitle, 
-                             hearing_Case_Num AS HearingCaseNumber, hearing_Case_Date AS HearingCaseDate, 
-                             hearing_Case_Status AS HearingCaseStatus
-                      FROM Hearing 
-                      WHERE YEARWEEK(hearing_Case_Date, 1) = YEARWEEK(CURDATE(), 1)";
+                         hearing_Case_Num AS HearingCaseNumber, hearing_Case_Date AS HearingCaseDate, 
+                         TIME_FORMAT(hearing_Case_Time, '%H:%i:%s') AS HearingCaseTime, hearing_case_status AS HearingCaseStatus
+                  FROM Hearing 
+                  WHERE YEARWEEK(hearing_Case_Date, 1) = YEARWEEK(CURDATE(), 1)";
                 break;
             default:
                 query = @"SELECT hearing_Id AS HearingId, hearing_Case_Title AS HearingCaseTitle, 
-                             hearing_Case_Num AS HearingCaseNumber, hearing_Case_Date AS HearingCaseDate, 
-                             hearing_Case_Status AS HearingCaseStatus
-                      FROM Hearing";
+                         hearing_Case_Num AS HearingCaseNumber, hearing_Case_Date AS HearingCaseDate, 
+                         TIME_FORMAT(hearing_Case_Time, '%H:%i:%s') AS HearingCaseTime, hearing_case_status AS HearingCaseStatus
+                  FROM Hearing";
                 break;
         }
 
@@ -1486,9 +1755,10 @@ public class Hearingdto
         public int HearingId { get; set; }
         public string HearingCaseTitle { get; set; }
         public string HearingCaseNumber { get; set; }
-        public DateTime HearingCaseDate { get; set; }
         public string HearingCaseStatus { get; set; }
-    }
+        public string HearingCaseDate { get; set; } = string.Empty; // Format: "yyyy-MM-dd"
+        public string HearingCaseTime { get; set; } = string.Empty; // Format: "HH:mm:ss"
+}
 
 public class CourtRecorddto
 {
@@ -1514,4 +1784,13 @@ public class DirectoryDto
         public string DirectoryEmail { get; set; }
         public string DirectoryStatus { get; set; }
     }
+
+public class ReportDto
+{
+    public int ReportId { get; set; }
+    public string ReportNatureCase { get; set; }
+    public string DirectoryPosition { get; set; }
+    public int CourtRecord_LinkId { get; set; }
+
+}
 
