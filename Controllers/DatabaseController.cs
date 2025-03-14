@@ -48,8 +48,9 @@ public class DatabaseController : ControllerBase
 
     //----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-    // ADD User IN MANAGE USERS
+    //ADD
 
+    //User
     [HttpPost("AddUser")]
     public async Task<IActionResult> AddUser([FromBody] UserDto user)
     {
@@ -88,7 +89,7 @@ public class DatabaseController : ControllerBase
         return Ok("User added successfully.");
     }
 
-    // ADD CATEGORY
+    //CATEGORY
     [HttpPost("AddCategory")]
     public async Task<IActionResult> AddCategory([FromBody] Categorydto category)
     {
@@ -113,8 +114,7 @@ public class DatabaseController : ControllerBase
         return Ok("Category added successfully.");
     }
 
-    //ADD COURTRECORD
-
+    //TASKS
     [HttpPost("AddTasks")]
     public async Task<IActionResult> AddTasks([FromBody] Tasksdto tasks)
     {
@@ -167,7 +167,7 @@ public class DatabaseController : ControllerBase
         }
     }
 
-    // HEARING
+    //HEARING
     [HttpPost("AddHearing")]
     public async Task<IActionResult> AddHearing([FromBody] Hearingdto hearing)
     {
@@ -225,6 +225,7 @@ public class DatabaseController : ControllerBase
         }
     }
 
+    //DIRECTORY
     [HttpPost("AddDirectory")]
     public async Task<IActionResult> AddDirectory([FromBody] DirectoryDto directory)
     {
@@ -262,6 +263,7 @@ public class DatabaseController : ControllerBase
         return Ok("User added successfully.");
     }
 
+    //COURTRECORD
     [HttpPost("AddCourtRecord")]
     public async Task<IActionResult> AddCourtRecord([FromBody] CourtRecorddto courtrecord)
     {
@@ -355,6 +357,9 @@ public class DatabaseController : ControllerBase
         }
     }
 
+    //REPORT SIDE
+
+    //ADDCaseColumn
     [HttpPost("AddNatureCaseColumn")]
     public async Task<IActionResult> AddNatureCaseColumn()
     {
@@ -375,7 +380,7 @@ public class DatabaseController : ControllerBase
         }
     }
 
-    //Add Foreign Key Constraint to
+    //AddForeignKeyConstraint
     [HttpPost("AddRequiredColumns")]
     public async Task<IActionResult> AddRequiredColumns()
     {
@@ -419,6 +424,7 @@ public class DatabaseController : ControllerBase
         }
     }
 
+    //ETO WALA LANG TESTING LANG FOR REPORT
     [HttpPost("PopulateReportTable")]
     public async Task<IActionResult> PopulateReportTable()
     {
@@ -493,9 +499,9 @@ public class DatabaseController : ControllerBase
 
     //--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+    //DELETE
 
-
-    //DELETING USER IN MANAGE USER
+    //USER
 
     [HttpDelete("DeleteUser/{id}")]
     public async Task<IActionResult> DeleteUser(int id)
@@ -526,7 +532,7 @@ public class DatabaseController : ControllerBase
         }
     }
 
-    //DELETE IN CATEGORY
+    //CATEGORY
 
     [HttpDelete("DeleteCategory/{id}")]
     public async Task<IActionResult> DeleteCategory(int id)
@@ -557,7 +563,7 @@ public class DatabaseController : ControllerBase
         }
     }
 
-    //DeleteHearing 
+    //HEARING
     [HttpDelete("DeleteHearing/{id}")]
     public async Task<IActionResult> DeleteHearing(int id)
     {
@@ -587,7 +593,7 @@ public class DatabaseController : ControllerBase
         }
     }
 
-    //DeleteTask
+    //TASK
     [HttpDelete("Deletetasks/{id}")]
     public async Task<IActionResult> Deletetasks(int id)
     {
@@ -617,7 +623,7 @@ public class DatabaseController : ControllerBase
         }
     }
 
-    //DeleteCourRecord
+    //COURTRECORD
     [HttpDelete("DeleteCourtRecord/{id}")]
     public async Task<IActionResult> DeleteCourtRecord(int id)
     {
@@ -683,7 +689,7 @@ public class DatabaseController : ControllerBase
         }
     }
 
-
+    //DIRECTORY
     [HttpDelete("DeleteDirectory/{id}")]
     public async Task<IActionResult> DeleteDirectory(int id)
     {
@@ -715,11 +721,9 @@ public class DatabaseController : ControllerBase
 
     //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-    //UPDATE 
+    //UPDATE OR UPDATE
 
-
-    //Users EDIT
-
+    //Users
     [HttpPut("UserEdit/{id}")]
     public async Task<IActionResult> UserEdit(int id, [FromBody] UserDto user)
     {
@@ -760,7 +764,7 @@ public class DatabaseController : ControllerBase
         return NotFound("No user found with the specified ID.");
     }
 
-    //Categories EDIT
+    //CATEGORIES
     [HttpPut("EditCategory/{id}")]
     public async Task<IActionResult> EditCategory(int id, [FromBody] Categorydto category)
     {
@@ -794,6 +798,7 @@ public class DatabaseController : ControllerBase
         return NotFound("No category found with the specified ID.");
     }
 
+    //COURTRECORD
     [HttpPut("UpdateCourtRecord/{id}")]
     public async Task<IActionResult> UpdateCourtRecord(int id, [FromBody] CourtRecorddto courtrecord)
     {
@@ -914,7 +919,7 @@ public class DatabaseController : ControllerBase
         }
     }
 
-    //UPDATEDIRECTORY
+    //DIRECTORY
     [HttpPut("DirectoryEdit/{id}")]
     public async Task<IActionResult> DirectoryEdit(int id, [FromBody] DirectoryDto directory)
     {
@@ -953,6 +958,7 @@ public class DatabaseController : ControllerBase
         return NotFound("No user found with the specified ID.");
     }
 
+    //COURTHEARING
     [HttpPut("UpdateCourtHearing/{id}")]
     public async Task<IActionResult> UpdateCourtHearing(int id, [FromBody] Hearingdto hearing)
     {
@@ -1015,14 +1021,11 @@ public class DatabaseController : ControllerBase
         }
     }
 
-
-
-
-
     //------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-    //DATAGRIDVIEW GET USERS
+    //DATAGRIDVIEW GETTING THE DATA
 
+    //GETUsers
     [HttpGet("GetUsers")]
     public async Task<IActionResult> GetUsers()
     {
@@ -1051,8 +1054,7 @@ public class DatabaseController : ControllerBase
         return Ok(users);
     }
 
-
-    //Get Categories DATAGRIDVIEW from the dashboards
+    //GetCategories
     [HttpGet("GetCategories")]
     public async Task<IActionResult> GetCategories()
     {
@@ -1079,9 +1081,7 @@ public class DatabaseController : ControllerBase
         return Ok(categories);
     }
 
-
-    //GET Tasks DATAGRIDVIEW from the Dashboard and Schedules
-
+    //GETTasks
     [HttpGet("GetTasks")]
     public async Task<IActionResult> GetTasks()
     {
@@ -1109,6 +1109,7 @@ public class DatabaseController : ControllerBase
         return Ok(categories);
     }
 
+    //GETHearing
     [HttpGet("GetHearing")]
     public async Task<IActionResult> GetHearing()
     {
@@ -1137,6 +1138,7 @@ public class DatabaseController : ControllerBase
         return Ok(hearings);
     }
 
+    //GETReport
     [HttpGet("GetReportData")]
     public async Task<IActionResult> GetReportData()
     {
@@ -1206,234 +1208,6 @@ public class DatabaseController : ControllerBase
         }
     }
 
-
-
-
-
-
-
-    //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-    // IN DASHBOARD COUNT USERS
-    [HttpGet("CountUsers")]
-    public async Task<IActionResult> CountUsers()
-    {
-        using var con = new MySqlConnection(_connectionString);
-        await con.OpenAsync();
-
-        string query = "SELECT COUNT(*) FROM ManageUsers";
-        using var cmd = new MySqlCommand(query, con);
-
-        try
-        {
-            int userCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
-            return Ok(userCount);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, $"An error occurred: {ex.Message}");
-        }
-    }
-
-    // IN DASHBOARD COUNT TASKS
-    [HttpGet("CountTasks")]
-    public async Task<IActionResult> CountTasks()
-    {
-        using var con = new MySqlConnection(_connectionString);
-        await con.OpenAsync();
-
-        string query = "SELECT COUNT(*) FROM Tasks";
-        using var cmd = new MySqlCommand(query, con);
-
-        try
-        {
-            int userCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
-            return Ok(userCount);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, $"An error occurred: {ex.Message}");
-        }
-    }
-
-    // IN DASHBOARD COUNT HEARINGS
-    [HttpGet("CountHearings")]
-    public async Task<IActionResult> CountHearings()
-    {
-        using var con = new MySqlConnection(_connectionString);
-        await con.OpenAsync();
-
-        string query = "SELECT COUNT(*) FROM Hearing";
-        using var cmd = new MySqlCommand(query, con);
-
-        try
-        {
-            int userCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
-            return Ok(userCount);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, $"An error occurred: {ex.Message}");
-        }
-    }
-
-    // IN UPCOMING Tasks COUNT 
-    [HttpGet("UpcomingTasks")]
-    public async Task<IActionResult> UpcomingTasks()
-    {
-        using var con = new MySqlConnection(_connectionString);
-        await con.OpenAsync();
-
-        string query = "SELECT COUNT(*) FROM Tasks WHERE sched_date > CURDATE()";
-        using var cmd = new MySqlCommand(query, con);
-
-        try
-        {
-            int UpcomingTasksCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
-            return Ok(UpcomingTasksCount);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, $"An error occurred: {ex.Message}");
-        }
-    }
-
-    // IN DASHBOARD DUE TODAY COUNT Tasks 
-    [HttpGet("DueTodayTasks")]
-    public async Task<IActionResult> DueTodayTasks()
-    {
-        using var con = new MySqlConnection(_connectionString);
-        await con.OpenAsync();
-
-        string query = "SELECT COUNT(*) FROM Tasks WHERE sched_date = CURDATE()";
-        using var cmd = new MySqlCommand(query, con);
-
-        try
-        {
-            int DueTodayTasksCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
-            return Ok(DueTodayTasksCount);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, $"An error occurred: {ex.Message}");
-        }
-    }
-
-    // IN DASHBOARD OVERDUE COUNT Tasks 
-    [HttpGet("OverDueTasks")]
-    public async Task<IActionResult> OverDueTasks()
-    {
-        using var con = new MySqlConnection(_connectionString);
-        await con.OpenAsync();
-
-        string query = "SELECT COUNT(*) FROM Tasks WHERE sched_date < CURDATE()";
-        using var cmd = new MySqlCommand(query, con);
-
-        try
-        {
-            int OverDueTasksCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
-            return Ok(OverDueTasksCount);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, $"An error occurred: {ex.Message}");
-        }
-    }
-
-    //Count Active Case Records
-
-    [HttpGet("CountCaseRecordsActive")]
-    public async Task<IActionResult> CountCaseRecords()
-    {
-        using var con = new MySqlConnection(_connectionString);
-        await con.OpenAsync();
-
-        string query = "SELECT COUNT(*) FROM COURTRECORD WHERE rec_Case_Status IN ('Active', 'Archived')";
-        using var cmd = new MySqlCommand(query, con);
-
-        try
-        {
-            int userCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
-            return Ok(userCount);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, $"An error occurred: {ex.Message}");
-        }
-    }
-
-    //Count Disposed Case Records
-    [HttpGet("CountCaseRecordsDisposed")]
-    public async Task<IActionResult> CountCaseRecordsDisposed()
-    {
-        using var con = new MySqlConnection(_connectionString);
-        await con.OpenAsync();
-
-        string query = "SELECT COUNT(*) FROM COURTRECORD WHERE rec_Case_Status IN ('Disposed')";
-        using var cmd = new MySqlCommand(query, con);
-
-        try
-        {
-            int userCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
-            return Ok(userCount);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, $"An error occurred: {ex.Message}");
-        }
-    }
-
-    //Count Archived Case Records
-    [HttpGet("CountCaseRecordsArchived")]
-    public async Task<IActionResult> CountCaseRecordsArchived()
-    {
-        using var con = new MySqlConnection(_connectionString);
-        await con.OpenAsync();
-
-        string query = "SELECT COUNT(*) FROM COURTRECORD WHERE rec_Case_Status IN ('Archived')";
-        using var cmd = new MySqlCommand(query, con);
-
-        try
-        {
-            int userCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
-            return Ok(userCount);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, $"An error occurred: {ex.Message}");
-        }
-    }
-
-    //Notifications Counts
-    [HttpGet("NotificationCounts")]
-    public async Task<IActionResult> GetNotificationCount()
-    {
-        using var con = new MySqlConnection(_connectionString);
-        await con.OpenAsync();
-
-        string query = @"SELECT COUNT(*) FROM (
-                        SELECT sched_Id FROM Tasks
-                        WHERE CAST(sched_date AS DATE) = CAST(CURDATE() AS DATE)
-                        AND TRIM(sched_status) = 'Pending'
-                        UNION ALL
-                        SELECT hearing_Id FROM Hearing
-                        WHERE CAST(hearing_Case_Date AS DATE) = CAST(CURDATE() AS DATE)
-                        AND TRIM(hearing_case_status) = 'Pending'
-                    ) AS CombinedCount";
-
-        using var cmd = new MySqlCommand(query, con);
-
-        try
-        {
-            int notificationCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
-            return Ok(notificationCount);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, $"An error occurred: {ex.Message}");
-        }
-    }
-
     //Notifications DATA
     [HttpGet("NotificationsData")]
     public async Task<IActionResult> GetNotificationDetails()
@@ -1484,7 +1258,235 @@ public class DatabaseController : ControllerBase
         }
     }
 
-    //FILTER COURT RECORD
+
+    //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+    //COUNTING
+
+    //COUNT-USERS
+    [HttpGet("CountUsers")]
+    public async Task<IActionResult> CountUsers()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = "SELECT COUNT(*) FROM ManageUsers";
+        using var cmd = new MySqlCommand(query, con);
+
+        try
+        {
+            int userCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+            return Ok(userCount);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
+
+    //COUNT-TASKS
+    [HttpGet("CountTasks")]
+    public async Task<IActionResult> CountTasks()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = "SELECT COUNT(*) FROM Tasks";
+        using var cmd = new MySqlCommand(query, con);
+
+        try
+        {
+            int userCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+            return Ok(userCount);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
+
+    //COUNT-HEARING
+    [HttpGet("CountHearings")]
+    public async Task<IActionResult> CountHearings()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = "SELECT COUNT(*) FROM Hearing";
+        using var cmd = new MySqlCommand(query, con);
+
+        try
+        {
+            int userCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+            return Ok(userCount);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
+
+    //UPCOMING-COUNT-TASKS
+    [HttpGet("UpcomingTasks")]
+    public async Task<IActionResult> UpcomingTasks()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = "SELECT COUNT(*) FROM Tasks WHERE sched_date > CURDATE()";
+        using var cmd = new MySqlCommand(query, con);
+
+        try
+        {
+            int UpcomingTasksCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+            return Ok(UpcomingTasksCount);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
+
+    //DUETODAY-COUNT-TASKS
+    [HttpGet("DueTodayTasks")]
+    public async Task<IActionResult> DueTodayTasks()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = "SELECT COUNT(*) FROM Tasks WHERE sched_date = CURDATE()";
+        using var cmd = new MySqlCommand(query, con);
+
+        try
+        {
+            int DueTodayTasksCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+            return Ok(DueTodayTasksCount);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
+
+    //OVERDUE-COUNT-TASKS
+    [HttpGet("OverDueTasks")]
+    public async Task<IActionResult> OverDueTasks()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = "SELECT COUNT(*) FROM Tasks WHERE sched_date < CURDATE()";
+        using var cmd = new MySqlCommand(query, con);
+
+        try
+        {
+            int OverDueTasksCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+            return Ok(OverDueTasksCount);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
+
+    //COUNT-ACTIVE-CASE-RECORDS
+    [HttpGet("CountCaseRecordsActive")]
+    public async Task<IActionResult> CountCaseRecords()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = "SELECT COUNT(*) FROM COURTRECORD WHERE rec_Case_Status IN ('Active', 'Archived')";
+        using var cmd = new MySqlCommand(query, con);
+
+        try
+        {
+            int userCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+            return Ok(userCount);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
+
+    //COUNT-DISPOSED-CASE-RECORDS
+    [HttpGet("CountCaseRecordsDisposed")]
+    public async Task<IActionResult> CountCaseRecordsDisposed()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = "SELECT COUNT(*) FROM COURTRECORD WHERE rec_Case_Status IN ('Disposed')";
+        using var cmd = new MySqlCommand(query, con);
+
+        try
+        {
+            int userCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+            return Ok(userCount);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
+
+    //COUNT-ARCHIVED-CASE-RECORDS
+    [HttpGet("CountCaseRecordsArchived")]
+    public async Task<IActionResult> CountCaseRecordsArchived()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = "SELECT COUNT(*) FROM COURTRECORD WHERE rec_Case_Status IN ('Archived')";
+        using var cmd = new MySqlCommand(query, con);
+
+        try
+        {
+            int userCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+            return Ok(userCount);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
+
+    //NOTIFICATIONS-COUNTS
+    [HttpGet("NotificationCounts")]
+    public async Task<IActionResult> GetNotificationCount()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = @"SELECT COUNT(*) FROM (
+                        SELECT sched_Id FROM Tasks
+                        WHERE CAST(sched_date AS DATE) = CAST(CURDATE() AS DATE)
+                        AND TRIM(sched_status) = 'Pending'
+                        UNION ALL
+                        SELECT hearing_Id FROM Hearing
+                        WHERE CAST(hearing_Case_Date AS DATE) = CAST(CURDATE() AS DATE)
+                        AND TRIM(hearing_case_status) = 'Pending'
+                    ) AS CombinedCount";
+
+        using var cmd = new MySqlCommand(query, con);
+
+        try
+        {
+            int notificationCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+            return Ok(notificationCount);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
+  
+    //-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+    //FILTERING DATA
+
+    //FILTER-COURT-RECORD
     [HttpGet("FilterRecords")]
     public async Task<ActionResult<IEnumerable<CourtRecorddto>>> GetFilteredRecords([FromQuery] string selectedFilter = "All")
     {
@@ -1664,6 +1666,7 @@ public class DatabaseController : ControllerBase
         }
     }
 
+    //FILTER-COURT-HEARINGS
     [HttpGet("FilterHearings")]
     public async Task<IActionResult> FilterHearings(string All)
     {
@@ -1706,23 +1709,22 @@ public class DatabaseController : ControllerBase
             return StatusCode(500, new { message = $"Error filtering hearings: {ex.Message}" });
         }
     }
-
-
 }
 
 
-//-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    //-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-// DTO Query
-// Model to receive login requests
-public class UserLogin
+    // DTO Query
+
+    // Model to receive login requests
+    public class UserLogin
     {
         public string user_Name { get; set; } = string.Empty; // Initialize to avoid null warning
         public string user_Pass { get; set; } = string.Empty; // Initialize to avoid null warning
     }
 
-    //ADDING USERS
-public class UserDto
+    //USER
+    public class UserDto
     {
         public int UserId { get; set; }
         public string FirstName { get; set; }
@@ -1733,8 +1735,8 @@ public class UserDto
         public string Password { get; set; }
     }
 
-    //ADDING CATRGORY
-public class Categorydto
+    //CATEGORY
+    public class Categorydto
     {
         public int CategoryId { get; set; }
         public string CategoryLegalCase { get; set; }
@@ -1742,7 +1744,8 @@ public class Categorydto
         public string CategoryNatureCase { get; set; }
     }
 
-public class Tasksdto
+    //TASK
+    public class Tasksdto
     {
         public int ScheduleId { get; set; }
         public string ScheduleTaskTitle { get; set; }
@@ -1750,7 +1753,9 @@ public class Tasksdto
         public DateTime ScheduleDate { get; set; }
         public string ScheduleStatus { get; set; }
     }
-public class Hearingdto
+
+    //HEARING
+    public class Hearingdto
     {
         public int HearingId { get; set; }
         public string HearingCaseTitle { get; set; }
@@ -1760,7 +1765,8 @@ public class Hearingdto
         public string HearingCaseTime { get; set; } = string.Empty; // Format: "HH:mm:ss"
 }
 
-public class CourtRecorddto
+    //COURTRECORD
+    public class CourtRecorddto
 {
     public int CourtRecordId { get; set; }
     public string RecordCaseNumber { get; set; } = string.Empty;
@@ -1775,7 +1781,8 @@ public class CourtRecorddto
     public string RecordNatureDescription { get; set; } = string.Empty;
 }
 
-public class DirectoryDto
+    //DIRECTORY
+    public class DirectoryDto
     {
         public int DirectoryId { get; set; }
         public string DirectoryName { get; set; }
@@ -1785,7 +1792,8 @@ public class DirectoryDto
         public string DirectoryStatus { get; set; }
     }
 
-public class ReportDto
+    //NOT-USED-YET-REPORT
+    public class ReportDto
 {
     public int ReportId { get; set; }
     public string ReportNatureCase { get; set; }
