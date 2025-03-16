@@ -31,20 +31,28 @@ public class DatabaseController : ControllerBase
         using var connection = new MySqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        using var cmd = new MySqlCommand("SELECT user_Role FROM ManageUsers WHERE user_Name = @USERNAME AND user_Pass = @PASSWORD", connection);
+        // First, get the user ID and role
+        using var cmd = new MySqlCommand("SELECT user_id, user_Role FROM ManageUsers WHERE user_Name = @USERNAME AND user_Pass = @PASSWORD", connection);
         cmd.Parameters.AddWithValue("@USERNAME", user.user_Name);
         cmd.Parameters.AddWithValue("@PASSWORD", user.user_Pass);
 
         using var reader = await cmd.ExecuteReaderAsync();
         if (await reader.ReadAsync())
         {
+            int userId = Convert.ToInt32(reader["user_id"]);
             string role = reader["user_Role"]?.ToString() ?? "Unknown";
-            return Ok(new { Success = true, Role = role });
+
+            // Close the reader before executing another command
+            await reader.CloseAsync();
+
+            // Log the successful login
+            await LogAction("Login", "ManageUsers", userId, user.user_Name);
+
+            return Ok(new { Success = true, Role = role, UserId = userId });
         }
 
         return Unauthorized("Incorrect username or password");
     }
-
 
     //----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -75,7 +83,7 @@ public class DatabaseController : ControllerBase
 
         // Insert new user
         string insertQuery = @"INSERT INTO ManageUsers (user_Fname, user_Lname, user_Role, user_Status, user_Name, user_Pass)
-                              VALUES (@FirstName, @LastName, @Role, @Status, @UserName, @Password)";
+                          VALUES (@FirstName, @LastName, @Role, @Status, @UserName, @Password)";
         using var insertCmd = new MySqlCommand(insertQuery, con);
         insertCmd.Parameters.AddWithValue("@FirstName", user.FirstName);
         insertCmd.Parameters.AddWithValue("@LastName", user.LastName);
@@ -86,8 +94,12 @@ public class DatabaseController : ControllerBase
 
         await insertCmd.ExecuteNonQueryAsync();
 
+        // Log the action
+        await LogAction($"User {user.UserName} has been added.", "ManageUsers", 0, "Admin");
+
         return Ok("User added successfully.");
     }
+
 
     //CATEGORY
     [HttpPost("AddCategory")]
@@ -103,13 +115,16 @@ public class DatabaseController : ControllerBase
 
         // Insert new category
         string insertQuery = @"INSERT INTO Category (cat_legalcase, cat_republicAct, cat_natureCase)
-                          VALUES (@LegalCase, @RepublicAct, @NatureCase)";
+                      VALUES (@LegalCase, @RepublicAct, @NatureCase)";
         using var insertCmd = new MySqlCommand(insertQuery, con);
         insertCmd.Parameters.AddWithValue("@LegalCase", category.CategoryLegalCase);
         insertCmd.Parameters.AddWithValue("@RepublicAct", category.CategoryRepublicAct);
         insertCmd.Parameters.AddWithValue("@NatureCase", category.CategoryNatureCase);
 
         await insertCmd.ExecuteNonQueryAsync();
+
+        // Log the action
+        await LogAction($"Category {category.CategoryLegalCase} has been added.", "Category", 0);
 
         return Ok("Category added successfully.");
     }
@@ -132,8 +147,8 @@ public class DatabaseController : ControllerBase
 
             // Direct check for task with same title AND date - simplified query
             string checkQuery = @"SELECT COUNT(*) FROM Tasks 
-                             WHERE sched_taskTitle = @TaskTitle 
-                             AND DATE(sched_date) = DATE(@Date)";
+                          WHERE sched_taskTitle = @TaskTitle 
+                          AND DATE(sched_date) = DATE(@Date)";
 
             using var checkCmd = new MySqlCommand(checkQuery, con);
             checkCmd.Parameters.AddWithValue("@TaskTitle", tasks.ScheduleTaskTitle.Trim());
@@ -149,7 +164,7 @@ public class DatabaseController : ControllerBase
 
             // Insert new task
             string insertQuery = @"INSERT INTO Tasks (sched_taskTitle, sched_taskDescription, sched_date, sched_status)
-                           VALUES (@TaskTitle, @TaskDescription, @Date, @Status)";
+                        VALUES (@TaskTitle, @TaskDescription, @Date, @Status)";
 
             using var insertCmd = new MySqlCommand(insertQuery, con);
             insertCmd.Parameters.AddWithValue("@TaskTitle", tasks.ScheduleTaskTitle.Trim());
@@ -158,6 +173,10 @@ public class DatabaseController : ControllerBase
             insertCmd.Parameters.AddWithValue("@Status", tasks.ScheduleStatus);
 
             await insertCmd.ExecuteNonQueryAsync();
+
+            // Log the action
+            await LogAction($"Task {tasks.ScheduleTaskTitle} has been added.", "Tasks", 0, "Admin");
+
             return Ok("Task added successfully.");
         }
         catch (Exception ex)
@@ -185,28 +204,8 @@ public class DatabaseController : ControllerBase
 
         try
         {
-            Console.WriteLine($"Incoming Hearing: Title={hearing.HearingCaseTitle}, Number={hearing.HearingCaseNumber}, Date={hearing.HearingCaseDate}, Time={hearing.HearingCaseTime}");
-
-            string checkQuery = @"SELECT COUNT(*) FROM Hearing 
-                              WHERE hearing_Case_Title = @CaseTitle 
-                              AND hearing_Case_Num = @CaseNumber
-                              AND DATE(hearing_Case_Date) = @CaseDate";
-
-            using var checkCmd = new MySqlCommand(checkQuery, con);
-            checkCmd.Parameters.AddWithValue("@CaseTitle", hearing.HearingCaseTitle.Trim());
-            checkCmd.Parameters.AddWithValue("@CaseNumber", hearing.HearingCaseNumber.Trim());
-            checkCmd.Parameters.AddWithValue("@CaseDate", hearing.HearingCaseDate);
-
-            var existingCount = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
-            Console.WriteLine($"Existing Hearing Count for same title, number and date: {existingCount}");
-
-            if (existingCount > 0)
-            {
-                return Conflict("A hearing with the same title, case number and date already exists.");
-            }
-
             string insertQuery = @"INSERT INTO Hearing (hearing_Case_Title, hearing_Case_Num, hearing_Case_Date, hearing_Case_Time, hearing_case_status)
-                              VALUES (@CaseTitle, @CaseNumber, @CaseDate, @CaseTime, @CaseStatus)";
+                           VALUES (@CaseTitle, @CaseNumber, @CaseDate, @CaseTime, @CaseStatus)";
 
             using var insertCmd = new MySqlCommand(insertQuery, con);
             insertCmd.Parameters.AddWithValue("@CaseTitle", hearing.HearingCaseTitle.Trim());
@@ -216,6 +215,10 @@ public class DatabaseController : ControllerBase
             insertCmd.Parameters.AddWithValue("@CaseStatus", hearing.HearingCaseStatus);
 
             await insertCmd.ExecuteNonQueryAsync();
+
+            // Log the action
+            await LogAction($"Hearing {hearing.HearingCaseTitle} has been added.", "Hearing", 0);
+
             return Ok("Hearing added successfully.");
         }
         catch (Exception ex)
@@ -224,6 +227,7 @@ public class DatabaseController : ControllerBase
             return StatusCode(500, "An error occurred while adding the hearing.");
         }
     }
+
 
     //DIRECTORY
     [HttpPost("AddDirectory")]
@@ -250,7 +254,7 @@ public class DatabaseController : ControllerBase
 
         // Insert new user
         string insertQuery = @"INSERT INTO Directory (direct_name, direct_position, direct_contact, direct_email, direct_status)
-                              VALUES (@DirectoryName, @DirectoryPosition, @DirectoryContact, @DirectoryEmail, @DirectoryStatus)";
+                           VALUES (@DirectoryName, @DirectoryPosition, @DirectoryContact, @DirectoryEmail, @DirectoryStatus)";
         using var insertCmd = new MySqlCommand(insertQuery, con);
         insertCmd.Parameters.AddWithValue("@DirectoryName", directory.DirectoryName);
         insertCmd.Parameters.AddWithValue("@DirectoryPosition", directory.DirectoryPosition);
@@ -260,12 +264,15 @@ public class DatabaseController : ControllerBase
 
         await insertCmd.ExecuteNonQueryAsync();
 
-        return Ok("User added successfully.");
+        // Log the action
+        await LogAction($"Directory {directory.DirectoryName} has been added.", "Directory", 0);
+
+        return Ok("Directory added successfully.");
     }
 
     //COURTRECORD
     [HttpPost("AddCourtRecord")]
-    public async Task<IActionResult> AddCourtRecord([FromBody] CourtRecorddto courtrecord)
+    public async Task<IActionResult> AddCourtRecord([FromBody] CourtRecorddto courtrecord, [FromHeader(Name = "UserName")] string userName = "System")
     {
         if (courtrecord == null || string.IsNullOrWhiteSpace(courtrecord.RecordCaseNumber))
         {
@@ -290,55 +297,49 @@ public class DatabaseController : ControllerBase
                 return Conflict("A court record with the same case number already exists.");
             }
 
-            object occDateValue = !string.IsNullOrEmpty(courtrecord.RecordDateFiledOCC)
-                ? courtrecord.RecordDateFiledOCC
-                : DBNull.Value;
-
-            object receivedDateValue = !string.IsNullOrEmpty(courtrecord.RecordDateFiledReceived)
-                ? courtrecord.RecordDateFiledReceived
-                : DBNull.Value;
+            object occDateValue = !string.IsNullOrEmpty(courtrecord.RecordDateFiledOCC) ? courtrecord.RecordDateFiledOCC : DBNull.Value;
+            object receivedDateValue = !string.IsNullOrEmpty(courtrecord.RecordDateFiledReceived) ? courtrecord.RecordDateFiledReceived : DBNull.Value;
 
             string insertQuery = @"INSERT INTO COURTRECORD (
-                                  rec_Case_Number,
-                                  rec_Case_Title,
-                                  rec_Date_Filed_Occ,
-                                  rec_Date_Filed_Received,
-                                  rec_Transferred,
-                                  rec_Case_Status,
-                                  rec_Nature_Case,
-                                  rec_Nature_Descrip,
-                                  rec_Time_Inputted,
-                                  rec_Date_Inputted)
-                              VALUES (
-                                  @CaseNumber,
-                                  @CaseTitle,
-                                  @RecordDateFiledOcc,
-                                  @RecordDateFiledReceived,
-                                  @RecordTransferred,
-                                  @RecordCaseStatus,
-                                  @RecordNatureCase,
-                                  @RecordNatureDescription,
-                                  CURRENT_TIME(),
-                                  CURRENT_DATE())";
+                        rec_Case_Number,
+                        rec_Case_Title,
+                        rec_Date_Filed_Occ,
+                        rec_Date_Filed_Received,
+                        rec_Transferred,
+                        rec_Case_Status,
+                        rec_Nature_Case,
+                        rec_Nature_Descrip,
+                        rec_Time_Inputted,
+                        rec_Date_Inputted)
+                    VALUES (
+                        @CaseNumber,
+                        @CaseTitle,
+                        @RecordDateFiledOcc,
+                        @RecordDateFiledReceived,
+                        @RecordTransferred,
+                        @RecordCaseStatus,
+                        @RecordNatureCase,
+                        @RecordNatureDescription,
+                        CURRENT_TIME(),
+                        CURRENT_DATE());
+                    SELECT LAST_INSERT_ID();";
 
             using var insertCmd = new MySqlCommand(insertQuery, con);
             insertCmd.Parameters.AddWithValue("@CaseNumber", courtrecord.RecordCaseNumber.Trim());
             insertCmd.Parameters.AddWithValue("@CaseTitle", courtrecord.RecordCaseTitle);
             insertCmd.Parameters.AddWithValue("@RecordDateFiledOcc", occDateValue);
             insertCmd.Parameters.AddWithValue("@RecordDateFiledReceived", receivedDateValue);
-            insertCmd.Parameters.AddWithValue("@RecordTransferred", !string.IsNullOrEmpty(courtrecord.RecordTransfer) ? courtrecord.RecordTransfer : DBNull.Value);
-            insertCmd.Parameters.AddWithValue("@RecordCaseStatus", !string.IsNullOrEmpty(courtrecord.RecordCaseStatus) ? courtrecord.RecordCaseStatus : DBNull.Value);
-            insertCmd.Parameters.AddWithValue("@RecordNatureCase", !string.IsNullOrEmpty(courtrecord.RecordNatureCase) ? courtrecord.RecordNatureCase : DBNull.Value);
-            insertCmd.Parameters.AddWithValue("@RecordNatureDescription", !string.IsNullOrEmpty(courtrecord.RecordNatureDescription) ? courtrecord.RecordNatureDescription : DBNull.Value);
+            insertCmd.Parameters.AddWithValue("@RecordTransferred", courtrecord.RecordTransfer ?? (object)DBNull.Value);
+            insertCmd.Parameters.AddWithValue("@RecordCaseStatus", courtrecord.RecordCaseStatus ?? (object)DBNull.Value);
+            insertCmd.Parameters.AddWithValue("@RecordNatureCase", courtrecord.RecordNatureCase ?? (object)DBNull.Value);
+            insertCmd.Parameters.AddWithValue("@RecordNatureDescription", courtrecord.RecordNatureDescription ?? (object)DBNull.Value);
 
-            int rowsAffected = await insertCmd.ExecuteNonQueryAsync();
+            int newRecordId = Convert.ToInt32(await insertCmd.ExecuteScalarAsync());
 
-            if (rowsAffected > 0)
+            if (newRecordId > 0)
             {
-                return Ok(new
-                {
-                    Message = "Court record added successfully."
-                });
+                await LogAction($"Added {courtrecord.RecordCaseTitle} successfully.", "COURTRECORD", newRecordId, userName);
+                return Ok(new { Message = $"Added {courtrecord.RecordCaseTitle} successfully.", RecordId = newRecordId });
             }
             else
             {
@@ -348,14 +349,11 @@ public class DatabaseController : ControllerBase
         catch (Exception ex)
         {
             Console.WriteLine($"Error adding court record: {ex.Message}");
-            Console.WriteLine($"Error StackTrace: {ex.StackTrace}");
-            return StatusCode(500, new
-            {
-                Message = "An error occurred while adding the court record.",
-                ErrorDetails = ex.Message
-            });
+            return StatusCode(500, new { Message = "An error occurred while adding the court record.", ErrorDetails = ex.Message });
         }
     }
+
+
 
     //REPORT SIDE
 
@@ -565,7 +563,7 @@ public class DatabaseController : ControllerBase
 
     //HEARING
     [HttpDelete("DeleteHearing/{id}")]
-    public async Task<IActionResult> DeleteHearing(int id)
+    public async Task<IActionResult> DeleteHearing(int id, [FromHeader(Name = "UserName")] string userName = "System")
     {
         Console.WriteLine($"DeleteHearing called with ID: {id}"); // Log when the route is hit
 
@@ -585,6 +583,9 @@ public class DatabaseController : ControllerBase
 
         if (rowsAffected > 0)
         {
+            // Log the deletion
+            await LogAction("Delete", "Hearing", id, userName);
+
             return Ok("Hearing has been deleted successfully.");
         }
         else
@@ -725,8 +726,14 @@ public class DatabaseController : ControllerBase
 
     //Users
     [HttpPut("UserEdit/{id}")]
-    public async Task<IActionResult> UserEdit(int id, [FromBody] UserDto user)
+    public async Task<IActionResult> UserEdit(int id, [FromBody] UserDto user, [FromHeader(Name = "UserRole")] string userRole, [FromHeader(Name = "UserName")] string userName)
     {
+        // Check if the user has the required role
+        if (userRole != "Admin" && userRole != "ChiefAdmin")
+        {
+            return StatusCode(403, "Only Admin and ChiefAdmin roles can edit users.");
+        }
+
         if (id <= 0 || user == null || string.IsNullOrWhiteSpace(user.UserName))
         {
             return BadRequest("Invalid user data.");
@@ -737,13 +744,13 @@ public class DatabaseController : ControllerBase
 
         // Fixed the query syntax
         string updateQuery = @"UPDATE ManageUsers 
-                          SET user_Fname = @FirstName,
-                              user_Lname = @LastName,
-                              user_Role = @Role,
-                              user_Status = @Status,
-                              user_Name = @UserName,
-                              user_Pass = @Password
-                          WHERE user_Id = @Id";
+                       SET user_Fname = @FirstName,
+                           user_Lname = @LastName,
+                           user_Role = @Role,
+                           user_Status = @Status,
+                           user_Name = @UserName,
+                           user_Pass = @Password
+                       WHERE user_Id = @Id";
 
         using var updateCmd = new MySqlCommand(updateQuery, con);
         updateCmd.Parameters.AddWithValue("@FirstName", user.FirstName);
@@ -758,6 +765,9 @@ public class DatabaseController : ControllerBase
 
         if (rowsAffected > 0)
         {
+            // Log the user edit action
+            await LogAction("Update", "ManageUsers", id, userName ?? "Unknown");
+
             return Ok("User updated successfully.");
         }
 
@@ -960,7 +970,7 @@ public class DatabaseController : ControllerBase
 
     //COURTHEARING
     [HttpPut("UpdateCourtHearing/{id}")]
-    public async Task<IActionResult> UpdateCourtHearing(int id, [FromBody] Hearingdto hearing)
+    public async Task<IActionResult> UpdateCourtHearing(int id, [FromBody] Hearingdto hearing, [FromHeader(Name = "UserName")] string userName = "System")
     {
         Console.WriteLine($"Incoming ID from URL: {id}");
         Console.WriteLine($"Incoming Hearing ID: {hearing?.HearingId}");
@@ -982,16 +992,17 @@ public class DatabaseController : ControllerBase
         }
 
         string query = @"UPDATE Hearing 
-                     SET hearing_Case_Title = @CaseTitle, 
-                         hearing_Case_Num = @CaseNumber, 
-                         hearing_case_status = @CaseStatus 
-                     WHERE hearing_Id = @HearingId";
-
+                 SET hearing_Case_Title = @CaseTitle, 
+                     hearing_Case_Num = @CaseNumber, 
+                     hearing_case_status = @CaseStatus 
+                 WHERE hearing_Id = @HearingId";
         try
         {
             using (var connection = new MySqlConnection(_connectionString))
             {
-                var existingHearing = await connection.QueryFirstOrDefaultAsync<Hearingdto>("SELECT * FROM Hearing WHERE hearing_Id = @HearingId", new { HearingId = id });
+                var existingHearing = await connection.QueryFirstOrDefaultAsync<Hearingdto>(
+                    "SELECT * FROM Hearing WHERE hearing_Id = @HearingId",
+                    new { HearingId = id });
 
                 if (existingHearing == null)
                 {
@@ -1008,6 +1019,9 @@ public class DatabaseController : ControllerBase
 
                 if (result > 0)
                 {
+                    // Log the successful update
+                    await LogAction("Update", "Hearing", id, userName);
+
                     return Ok("Hearing updated successfully.");
                 }
 
@@ -1481,7 +1495,7 @@ public class DatabaseController : ControllerBase
             return StatusCode(500, $"An error occurred: {ex.Message}");
         }
     }
-  
+
     //-----------------------------------------------------------------------------------------------------------------------------------------------------------------
 
     //FILTERING DATA
@@ -1709,15 +1723,58 @@ public class DatabaseController : ControllerBase
             return StatusCode(500, new { message = $"Error filtering hearings: {ex.Message}" });
         }
     }
+
+
+
+    //----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+    //LOGS
+
+    // Single unified logging method
+    private async Task<int>LogAction(string action, string tableName, int recordId, string userName = "Unknown")
+    {
+        using var connection = new MySqlConnection(_connectionString);
+        var sql = "INSERT INTO Logs (Action, TableName, RecordId, UserName) VALUES (@Action, @TableName, @RecordId, @UserName)";
+
+        return await connection.ExecuteAsync(sql, new
+        {
+            Action = action,
+            TableName = tableName,
+            RecordId = recordId,
+            UserName = userName
+        });
+    }
+
+   
+
+    [HttpGet("GetLogs")]
+    public async Task<ActionResult<IEnumerable<LogsDto>>>GetLogs()
+    {
+        using var connection = new MySqlConnection(_connectionString);
+        var sql = "SELECT * FROM Logs ORDER BY Timestamp DESC";
+        var logs = await connection.QueryAsync<LogsDto>(sql);
+        return Ok(logs);
+    }
+
+
+
+
+
+
+
+
+
 }
 
 
-    //-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-    // DTO Query
+//-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-    // Model to receive login requests
-    public class UserLogin
+// DTO Query
+
+// Model to receive login requests
+public class UserLogin
     {
         public string user_Name { get; set; } = string.Empty; // Initialize to avoid null warning
         public string user_Pass { get; set; } = string.Empty; // Initialize to avoid null warning
@@ -1802,3 +1859,13 @@ public class DatabaseController : ControllerBase
 
 }
 
+    //LOGS-DTO
+    public class LogsDto
+    {
+        public int LogId { get; set; }
+        public string Action { get; set; } = string.Empty;
+        public string TableName { get; set; } = string.Empty;
+        public int RecordId { get; set; }
+        public string UserName { get; set; } = string.Empty;
+        public DateTime Timestamp { get; set; }
+    }
