@@ -1,11 +1,11 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using MySql.Data.MySqlClient;
+using MySqlConnector;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using System.Data;
 using System.Text.Json.Serialization;
 using Dapper;
-using Mysqlx.Crud;
+
 
 [Route("api/[controller]")]
 [ApiController]
@@ -728,29 +728,60 @@ public class DatabaseController : ControllerBase
     [HttpPut("UserEdit/{id}")]
     public async Task<IActionResult> UserEdit(int id, [FromBody] UserDto user, [FromHeader(Name = "UserRole")] string userRole, [FromHeader(Name = "UserName")] string userName)
     {
-        // Check if the user has the required role
+        Console.WriteLine($"UserEdit called with ID: {id}, Role: {userRole}, UserName: {userName}");
+
         if (userRole != "Admin" && userRole != "ChiefAdmin")
         {
+            Console.WriteLine("Unauthorized access attempt.");
             return StatusCode(403, "Only Admin and ChiefAdmin roles can edit users.");
         }
 
         if (id <= 0 || user == null || string.IsNullOrWhiteSpace(user.UserName))
         {
+            Console.WriteLine("Invalid user data.");
             return BadRequest("Invalid user data.");
         }
 
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
+        Console.WriteLine("Database connection opened.");
 
-        // Fixed the query syntax
+        // Fetch old values before updating
+        string selectQuery = "SELECT user_Fname, user_Lname, user_Role, user_Status, user_Name, user_Pass FROM ManageUsers WHERE user_Id = @Id";
+        using var selectCmd = new MySqlCommand(selectQuery, con);
+        selectCmd.Parameters.AddWithValue("@Id", id);
+
+        UserDto oldUser = null;
+        using (var reader = await selectCmd.ExecuteReaderAsync())
+        {
+            if (await reader.ReadAsync())
+            {
+                oldUser = new UserDto
+                {
+                    FirstName = reader["user_Fname"].ToString(),
+                    LastName = reader["user_Lname"].ToString(),
+                    Role = reader["user_Role"].ToString(),
+                    Status = reader["user_Status"].ToString(),
+                    UserName = reader["user_Name"].ToString(),
+                    Password = reader["user_Pass"].ToString()
+                };
+            }
+        }
+
+        if (oldUser == null)
+        {
+            Console.WriteLine("User not found.");
+            return NotFound("No user found with the specified ID.");
+        }
+
         string updateQuery = @"UPDATE ManageUsers 
-                       SET user_Fname = @FirstName,
-                           user_Lname = @LastName,
-                           user_Role = @Role,
-                           user_Status = @Status,
-                           user_Name = @UserName,
-                           user_Pass = @Password
-                       WHERE user_Id = @Id";
+                SET user_Fname = @FirstName,
+                    user_Lname = @LastName,
+                    user_Role = @Role,
+                    user_Status = @Status,
+                    user_Name = @UserName,
+                    user_Pass = @Password
+                WHERE user_Id = @Id";
 
         using var updateCmd = new MySqlCommand(updateQuery, con);
         updateCmd.Parameters.AddWithValue("@FirstName", user.FirstName);
@@ -761,52 +792,137 @@ public class DatabaseController : ControllerBase
         updateCmd.Parameters.AddWithValue("@Password", user.Password);
         updateCmd.Parameters.AddWithValue("@Id", id);
 
+        Console.WriteLine("Executing update command...");
         int rowsAffected = await updateCmd.ExecuteNonQueryAsync();
+        Console.WriteLine($"Rows affected: {rowsAffected}");
 
         if (rowsAffected > 0)
         {
-            // Log the user edit action
-            await LogAction("Update", "ManageUsers", id, userName ?? "Unknown");
+            Console.WriteLine($"User {id} updated successfully.");
+
+            // Log changes only if values are different
+            if (oldUser.FirstName != user.FirstName)
+                await LogAction($"First Name changed from '{oldUser.FirstName}' to '{user.FirstName}'", "ManageUsers", id, userName);
+
+            if (oldUser.LastName != user.LastName)
+                await LogAction($"Last Name changed from '{oldUser.LastName}' to '{user.LastName}'", "ManageUsers", id, userName);
+
+            if (oldUser.Role != user.Role)
+                await LogAction($"Role changed from '{oldUser.Role}' to '{user.Role}'", "ManageUsers", id, userName);
+
+            if (oldUser.Status != user.Status)
+                await LogAction($"Status changed from '{oldUser.Status}' to '{user.Status}'", "ManageUsers", id, userName);
+
+            if (oldUser.UserName != user.UserName)
+                await LogAction($"Username changed from '{oldUser.UserName}' to '{user.UserName}'", "ManageUsers", id, userName);
+
+            if (oldUser.Password != user.Password)
+                await LogAction($"Password was updated.", "ManageUsers", id, userName);
 
             return Ok("User updated successfully.");
         }
 
+        Console.WriteLine("User update failed, ID not found.");
         return NotFound("No user found with the specified ID.");
     }
 
+
+
+    private async Task LogChange(string tableName, int recordId, string fieldName, string oldValue, string newValue, string userName)
+    {
+        string action = $"string updated \"{oldValue}\" to \"{newValue}\" in {fieldName} of {tableName}";
+        await LogAction(action, tableName, recordId, userName);
+    }
+
+
+
+
     //CATEGORIES
     [HttpPut("EditCategory/{id}")]
-    public async Task<IActionResult> EditCategory(int id, [FromBody] Categorydto category)
+    public async Task<IActionResult> EditCategory(int id, [FromBody] EditCategoryRequest request)
     {
-        if (id <= 0 || category == null || string.IsNullOrWhiteSpace(category.CategoryLegalCase))
+        using (var con = new MySqlConnection(_connectionString))
         {
-            return BadRequest("Invalid category data.");
+            await con.OpenAsync();
+
+            // Fixed select query with aliases
+            string selectQuery = @"SELECT 
+            cat_legalcase AS CategoryLegalCase,
+            cat_republicAct AS CategoryRepublicAct,
+            cat_natureCase AS CategoryNatureCase 
+            FROM Category 
+            WHERE cat_Id = @Id";
+
+            var oldCategory = await con.QueryFirstOrDefaultAsync<Categorydto>(selectQuery, new { Id = id });
+
+            if (oldCategory == null)
+            {
+                Console.WriteLine($"No category found for ID: {id}");
+                return NotFound("No category found with the specified ID.");
+            }
+
+            // Debug: Check actual database values
+            Console.WriteLine($"DB VALUES - Legal: {oldCategory.CategoryLegalCase ?? "null"}, RA: {oldCategory.CategoryRepublicAct ?? "null"}, Nature: {oldCategory.CategoryNatureCase ?? "null"}");
+
+            // Handle nulls
+            oldCategory.CategoryLegalCase = oldCategory.CategoryLegalCase ?? "";
+            oldCategory.CategoryRepublicAct = oldCategory.CategoryRepublicAct ?? "";
+            oldCategory.CategoryNatureCase = oldCategory.CategoryNatureCase ?? "";
+
+            request.Category.CategoryLegalCase = request.Category.CategoryLegalCase ?? "";
+            request.Category.CategoryRepublicAct = request.Category.CategoryRepublicAct ?? "";
+            request.Category.CategoryNatureCase = request.Category.CategoryNatureCase ?? "";
+
+            // Log old data for debugging
+            Console.WriteLine($"Old Legal Case: {oldCategory.CategoryLegalCase}");
+            Console.WriteLine($"Old Republic Act: {oldCategory.CategoryRepublicAct}");
+            Console.WriteLine($"Old Nature Case: {oldCategory.CategoryNatureCase}");
+
+            Console.WriteLine($"New Legal Case: {request.Category.CategoryLegalCase}");
+            Console.WriteLine($"New Republic Act: {request.Category.CategoryRepublicAct}");
+            Console.WriteLine($"New Nature Case: {request.Category.CategoryNatureCase}");
+
+            // Update database
+            string updateQuery = @"UPDATE Category
+                          SET cat_legalcase = @LegalCase,
+                              cat_republicAct = @RepublicAct,
+                              cat_natureCase = @NatureCase
+                          WHERE cat_Id = @Id";
+
+            int rowsAffected = await con.ExecuteAsync(updateQuery, new
+            {
+                LegalCase = request.Category.CategoryLegalCase,
+                RepublicAct = request.Category.CategoryRepublicAct,
+                NatureCase = request.Category.CategoryNatureCase,
+                Id = id
+            });
+
+            if (rowsAffected > 0)
+            {
+                Console.WriteLine($"Category {id} updated successfully.");
+
+                // Log changes
+                if (oldCategory.CategoryLegalCase != request.Category.CategoryLegalCase)
+                    await LogChange("Category", id, "Legal Case", oldCategory.CategoryLegalCase, request.Category.CategoryLegalCase, request.UserName);
+
+                if (oldCategory.CategoryRepublicAct != request.Category.CategoryRepublicAct)
+                    await LogChange("Category", id, "Republic Act", oldCategory.CategoryRepublicAct, request.Category.CategoryRepublicAct, request.UserName);
+
+                if (oldCategory.CategoryNatureCase != request.Category.CategoryNatureCase)
+                    await LogChange("Category", id, "Nature Case", oldCategory.CategoryNatureCase, request.Category.CategoryNatureCase, request.UserName);
+
+                return Ok("Category updated successfully.");
+            }
+
+            return NotFound("No category found with the specified ID.");
         }
-
-        using var con = new MySqlConnection(_connectionString);
-        await con.OpenAsync();
-
-        string updateQuery = @"UPDATE Category
-                            SET cat_legalcase = @LegalCase,
-                                cat_republicAct = @RepublicAct,
-                                cat_natureCase = @NatureCase
-                            WHERE cat_Id = @Id";
-
-        using var updateCmd = new MySqlCommand(updateQuery, con);
-        updateCmd.Parameters.AddWithValue("@LegalCase", category.CategoryLegalCase);
-        updateCmd.Parameters.AddWithValue("@RepublicAct", category.CategoryRepublicAct);
-        updateCmd.Parameters.AddWithValue("@NatureCase", category.CategoryNatureCase);
-        updateCmd.Parameters.AddWithValue("@Id", id);
-
-        int rowsAffected = await updateCmd.ExecuteNonQueryAsync();
-
-        if (rowsAffected > 0)
-        {
-            return Ok("Category updated successfully.");
-        }
-
-        return NotFound("No category found with the specified ID.");
     }
+
+
+
+
+    //--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 
     //COURTRECORD
     [HttpPut("UpdateCourtRecord/{id}")]
@@ -826,69 +942,50 @@ public class DatabaseController : ControllerBase
         {
             Console.WriteLine($"Attempting to update court record with ID: {id}");
 
-            string columnName = "id";
-            string schemaQuery = "DESCRIBE COURTRECORD";
-            using var schemaCmd = new MySqlCommand(schemaQuery, con);
-            using var schemaReader = await schemaCmd.ExecuteReaderAsync();
+            // Fetch old values
+            string oldCaseNumber = "", oldCaseTitle = "", oldLegalCase = "";
 
-            while (await schemaReader.ReadAsync())
+            string fetchOldValuesQuery = "SELECT rec_Case_Number, rec_Case_Title, rec_Nature_Case FROM COURTRECORD WHERE courtRecord_Id = @Id";
+            using var fetchOldValuesCmd = new MySqlCommand(fetchOldValuesQuery, con);
+            fetchOldValuesCmd.Parameters.AddWithValue("@Id", id);
+            using var reader = await fetchOldValuesCmd.ExecuteReaderAsync();
+
+            if (await reader.ReadAsync())
             {
-                string field = schemaReader.GetString(0);
-                string key = schemaReader.GetString(3);
-                if (key.Equals("PRI", StringComparison.OrdinalIgnoreCase))
-                {
-                    columnName = field;
-                    break;
-                }
+                oldCaseNumber = reader["rec_Case_Number"]?.ToString() ?? "";
+                oldCaseTitle = reader["rec_Case_Title"]?.ToString() ?? "";
+                oldLegalCase = reader["rec_Nature_Case"]?.ToString() ?? "";
             }
-            schemaReader.Close();
+            reader.Close();
 
-            Console.WriteLine($"Using primary key column: {columnName}");
-
-            string existsQuery = $"SELECT COUNT(*) FROM COURTRECORD WHERE {columnName} = @Id";
-            using var existsCmd = new MySqlCommand(existsQuery, con);
-            existsCmd.Parameters.AddWithValue("@Id", id);
-
-            var existingCount = Convert.ToInt32(await existsCmd.ExecuteScalarAsync());
-
-            if (existingCount == 0)
-            {
-                return NotFound($"Court record with ID {id} not found.");
-            }
-
-            string duplicateQuery = $"SELECT COUNT(*) FROM COURTRECORD WHERE rec_Case_Number = @CaseNumber AND {columnName} != @Id";
+            // Check for duplicate Case Number
+            string duplicateQuery = $"SELECT COUNT(*) FROM COURTRECORD WHERE rec_Case_Number = @CaseNumber AND courtRecord_Id != @Id";
             using var duplicateCmd = new MySqlCommand(duplicateQuery, con);
             duplicateCmd.Parameters.AddWithValue("@CaseNumber", courtrecord.RecordCaseNumber.Trim());
             duplicateCmd.Parameters.AddWithValue("@Id", id);
 
             var duplicateCount = Convert.ToInt32(await duplicateCmd.ExecuteScalarAsync());
-
             if (duplicateCount > 0)
             {
                 return Conflict("Another court record with the same case number already exists.");
             }
 
             // Process date and time values
-            object occDateValue = !string.IsNullOrEmpty(courtrecord.RecordDateFiledOCC)
-                ? courtrecord.RecordDateFiledOCC
-                : DBNull.Value;
+            object occDateValue = !string.IsNullOrEmpty(courtrecord.RecordDateFiledOCC) ? courtrecord.RecordDateFiledOCC : DBNull.Value;
+            object receivedDateValue = !string.IsNullOrEmpty(courtrecord.RecordDateFiledReceived) ? courtrecord.RecordDateFiledReceived : DBNull.Value;
 
-            object receivedDateValue = !string.IsNullOrEmpty(courtrecord.RecordDateFiledReceived)
-                ? courtrecord.RecordDateFiledReceived
-                : DBNull.Value;
-
-            string updateQuery = $@"UPDATE COURTRECORD 
-                 SET rec_Case_Number = @CaseNumber,
-                     rec_Case_Title = @CaseTitle,
-                     rec_Date_Filed_Occ = @RecordDateFiledOcc,
-                     rec_Date_Filed_Received = @RecordDateFiledReceived,
-                     rec_Transferred = @RecordTransferred,
-                     rec_Case_Status = @RecordCaseStatus,
-                     rec_Nature_Case = @RecordNatureCase,
-                     rec_Nature_Descrip = @RecordNatureDescription,
-                     rec_Time_Inputted = @RecordTimeInputted,
-                     rec_Date_Inputted = @RecordDateInputted
-                 WHERE {columnName} = @Id";
+            string updateQuery = @"UPDATE COURTRECORD 
+            SET rec_Case_Number = @CaseNumber,
+                rec_Case_Title = @CaseTitle,
+                rec_Date_Inputted = @RecordDateInputted,
+                rec_Time_Inputted = @RecordTimeInputted,
+                rec_Date_Filed_Occ = @RecordDateFiledOcc,
+                rec_Date_Filed_Received = @RecordDateFiledReceived,
+                rec_Transferred = @RecordTransferred,
+                rec_Case_Status = @RecordCaseStatus,
+                rec_Nature_Case = @RecordNatureCase,
+                rec_Nature_Descrip = @RecordNatureDescription
+            WHERE courtRecord_Id = @Id";
 
             using var updateCmd = new MySqlCommand(updateQuery, con);
             updateCmd.Parameters.AddWithValue("@Id", id);
@@ -907,10 +1004,29 @@ public class DatabaseController : ControllerBase
 
             if (rowsAffected > 0)
             {
-                return Ok(new
+                // Log changes
+                List<string> changes = new List<string>();
+
+                if (oldCaseNumber != courtrecord.RecordCaseNumber)
                 {
-                    Message = $"Court record with ID {id} updated successfully."
-                });
+                    changes.Add($"updated \"{oldCaseNumber}\" to \"{courtrecord.RecordCaseNumber}\" in Case Number");
+                }
+                if (oldCaseTitle != courtrecord.RecordCaseTitle)
+                {
+                    changes.Add($"updated \"{oldCaseTitle}\" to \"{courtrecord.RecordCaseTitle}\" in Case Title");
+                }
+                if (oldLegalCase != courtrecord.RecordNatureCase)
+                {
+                    changes.Add($"updated \"{oldLegalCase}\" to \"{courtrecord.RecordNatureCase}\" in Legal Case of Category");
+                }
+
+                if (changes.Count > 0)
+                {
+                    string logMessage = string.Join(", ", changes);
+                    await LogAction(logMessage, "COURTRECORD", id, "YourUserName"); // Replace with actual username
+                }
+
+                return Ok(new { Message = $"Court record with ID {id} updated successfully." });
             }
             else
             {
@@ -929,44 +1045,111 @@ public class DatabaseController : ControllerBase
         }
     }
 
+
     //DIRECTORY
     [HttpPut("DirectoryEdit/{id}")]
     public async Task<IActionResult> DirectoryEdit(int id, [FromBody] DirectoryDto directory)
     {
         if (id <= 0 || directory == null || string.IsNullOrWhiteSpace(directory.DirectoryName))
         {
-            return BadRequest("Invalid user data.");
+            return BadRequest("Invalid directory data.");
         }
 
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
 
-        // Fixed the query syntax
-        string updateQuery = @"UPDATE Directory 
-                          SET direct_name = @DirectoryName,
-                              direct_position = @DirectoryPosition,
-                              direct_contact = @DirectoryContact,
-                              direct_email = @DirectoryEmail,
-                              direct_status = @DirectoryStatus
-                          WHERE directory_Id  = @Id";
-
-        using var updateCmd = new MySqlCommand(updateQuery, con);
-        updateCmd.Parameters.AddWithValue("@DirectoryName", directory.DirectoryName);
-        updateCmd.Parameters.AddWithValue("@DirectoryPosition", directory.DirectoryPosition);
-        updateCmd.Parameters.AddWithValue("@DirectoryContact", directory.DirectoryContact);
-        updateCmd.Parameters.AddWithValue("@DirectoryEmail", directory.DirectoryEmail);
-        updateCmd.Parameters.AddWithValue("@DirectoryStatus", directory.DirectoryStatus);
-        updateCmd.Parameters.AddWithValue("@Id", id);
-
-        int rowsAffected = await updateCmd.ExecuteNonQueryAsync();
-
-        if (rowsAffected > 0)
+        try
         {
-            return Ok("User updated successfully.");
-        }
+            Console.WriteLine($"Attempting to update directory entry with ID: {id}");
 
-        return NotFound("No user found with the specified ID.");
+            // Fetch old values
+            string oldName = "", oldPosition = "", oldContact = "", oldEmail = "", oldStatus = "";
+
+            string fetchOldValuesQuery = "SELECT direct_name, direct_position, direct_contact, direct_email, direct_status FROM Directory WHERE directory_Id = @Id";
+            using var fetchOldValuesCmd = new MySqlCommand(fetchOldValuesQuery, con);
+            fetchOldValuesCmd.Parameters.AddWithValue("@Id", id);
+            using var reader = await fetchOldValuesCmd.ExecuteReaderAsync();
+
+            if (await reader.ReadAsync())
+            {
+                oldName = reader["direct_name"]?.ToString() ?? "";
+                oldPosition = reader["direct_position"]?.ToString() ?? "";
+                oldContact = reader["direct_contact"]?.ToString() ?? "";
+                oldEmail = reader["direct_email"]?.ToString() ?? "";
+                oldStatus = reader["direct_status"]?.ToString() ?? "";
+            }
+            reader.Close();
+
+            // Update query
+            string updateQuery = @"UPDATE Directory 
+                            SET direct_name = @DirectoryName,
+                                direct_position = @DirectoryPosition,
+                                direct_contact = @DirectoryContact,
+                                direct_email = @DirectoryEmail,
+                                direct_status = @DirectoryStatus
+                            WHERE directory_Id = @Id";
+
+            using var updateCmd = new MySqlCommand(updateQuery, con);
+            updateCmd.Parameters.AddWithValue("@Id", id);
+            updateCmd.Parameters.AddWithValue("@DirectoryName", directory.DirectoryName);
+            updateCmd.Parameters.AddWithValue("@DirectoryPosition", directory.DirectoryPosition);
+            updateCmd.Parameters.AddWithValue("@DirectoryContact", directory.DirectoryContact);
+            updateCmd.Parameters.AddWithValue("@DirectoryEmail", directory.DirectoryEmail);
+            updateCmd.Parameters.AddWithValue("@DirectoryStatus", directory.DirectoryStatus);
+
+            int rowsAffected = await updateCmd.ExecuteNonQueryAsync();
+
+            if (rowsAffected > 0)
+            {
+                // Log changes
+                List<string> changes = new List<string>();
+
+                if (oldName != directory.DirectoryName)
+                {
+                    changes.Add($"updated \"{oldName}\" to \"{directory.DirectoryName}\" in Name");
+                }
+                if (oldPosition != directory.DirectoryPosition)
+                {
+                    changes.Add($"updated \"{oldPosition}\" to \"{directory.DirectoryPosition}\" in Position");
+                }
+                if (oldContact != directory.DirectoryContact)
+                {
+                    changes.Add($"updated \"{oldContact}\" to \"{directory.DirectoryContact}\" in Contact");
+                }
+                if (oldEmail != directory.DirectoryEmail)
+                {
+                    changes.Add($"updated \"{oldEmail}\" to \"{directory.DirectoryEmail}\" in Email");
+                }
+                if (oldStatus != directory.DirectoryStatus)
+                {
+                    changes.Add($"updated \"{oldStatus}\" to \"{directory.DirectoryStatus}\" in Status");
+                }
+
+                if (changes.Count > 0)
+                {
+                    string logMessage = string.Join(", ", changes);
+                    await LogAction(logMessage, "DIRECTORY", id, "YourUserName"); // Replace with actual username
+                }
+
+                return Ok(new { Message = $"Directory entry with ID {id} updated successfully." });
+            }
+            else
+            {
+                return NotFound("No directory entry found with the specified ID.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error updating directory entry: {ex.Message}");
+            Console.WriteLine($"Error StackTrace: {ex.StackTrace}");
+            return StatusCode(500, new
+            {
+                Message = "An error occurred while updating the directory entry.",
+                ErrorDetails = ex.Message
+            });
+        }
     }
+
 
     //COURTHEARING
     [HttpPut("UpdateCourtHearing/{id}")]
@@ -991,42 +1174,70 @@ public class DatabaseController : ControllerBase
             return BadRequest("ID mismatch.");
         }
 
-        string query = @"UPDATE Hearing 
-                 SET hearing_Case_Title = @CaseTitle, 
-                     hearing_Case_Num = @CaseNumber, 
-                     hearing_case_status = @CaseStatus 
-                 WHERE hearing_Id = @HearingId";
+        using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync();
+
         try
         {
-            using (var connection = new MySqlConnection(_connectionString))
+            // Fetch old values with manual mapping
+            var existingHearing = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                "SELECT hearing_Case_Title, hearing_Case_Num, hearing_case_status FROM Hearing WHERE hearing_Id = @HearingId",
+                new { HearingId = id });
+
+            if (existingHearing == null)
             {
-                var existingHearing = await connection.QueryFirstOrDefaultAsync<Hearingdto>(
-                    "SELECT * FROM Hearing WHERE hearing_Id = @HearingId",
-                    new { HearingId = id });
-
-                if (existingHearing == null)
-                {
-                    return NotFound("Hearing not found.");
-                }
-
-                var result = await connection.ExecuteAsync(query, new
-                {
-                    CaseTitle = hearing.HearingCaseTitle ?? existingHearing.HearingCaseTitle,
-                    CaseNumber = hearing.HearingCaseNumber ?? existingHearing.HearingCaseNumber,
-                    CaseStatus = hearing.HearingCaseStatus ?? existingHearing.HearingCaseStatus,
-                    HearingId = id
-                });
-
-                if (result > 0)
-                {
-                    // Log the successful update
-                    await LogAction("Update", "Hearing", id, userName);
-
-                    return Ok("Hearing updated successfully.");
-                }
-
-                return StatusCode(500, "No changes were made.");
+                return NotFound("Hearing not found.");
             }
+
+            // Manually extract values and handle NULLs
+            string oldCaseTitle = existingHearing?.hearing_Case_Title ?? "";
+            string oldCaseNumber = existingHearing?.hearing_Case_Num ?? "";
+            string oldCaseStatus = existingHearing?.hearing_case_status ?? "";
+
+            // Compare old and new values
+            List<string> changes = new List<string>();
+
+            if (!string.Equals(oldCaseTitle, hearing.HearingCaseTitle ?? "", StringComparison.Ordinal))
+            {
+                changes.Add($"updated \"{oldCaseTitle}\" to \"{hearing.HearingCaseTitle}\" in Case Title");
+            }
+            if (!string.Equals(oldCaseNumber, hearing.HearingCaseNumber ?? "", StringComparison.Ordinal))
+            {
+                changes.Add($"updated \"{oldCaseNumber}\" to \"{hearing.HearingCaseNumber}\" in Case Number");
+            }
+            if (!string.Equals(oldCaseStatus, hearing.HearingCaseStatus ?? "", StringComparison.Ordinal))
+            {
+                changes.Add($"updated \"{oldCaseStatus}\" to \"{hearing.HearingCaseStatus}\" in Case Status");
+            }
+
+            // Perform update
+            string query = @"UPDATE Hearing 
+                         SET hearing_Case_Title = @CaseTitle, 
+                             hearing_Case_Num = @CaseNumber, 
+                             hearing_case_status = @CaseStatus 
+                         WHERE hearing_Id = @HearingId";
+
+            var result = await connection.ExecuteAsync(query, new
+            {
+                CaseTitle = hearing.HearingCaseTitle ?? oldCaseTitle,
+                CaseNumber = hearing.HearingCaseNumber ?? oldCaseNumber,
+                CaseStatus = hearing.HearingCaseStatus ?? oldCaseStatus,
+                HearingId = id
+            });
+
+            if (result > 0)
+            {
+                // Log changes if any
+                if (changes.Count > 0)
+                {
+                    string logMessage = string.Join(", ", changes);
+                    await LogAction(logMessage, "HEARING", id, userName);
+                }
+
+                return Ok(new { Message = $"Hearing entry with ID {id} updated successfully." });
+            }
+
+            return StatusCode(500, "No changes were made.");
         }
         catch (Exception ex)
         {
@@ -1034,6 +1245,9 @@ public class DatabaseController : ControllerBase
             return StatusCode(500, new { message = $"Error updating hearing: {ex.Message}" });
         }
     }
+
+
+
 
     //------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -1732,10 +1946,10 @@ public class DatabaseController : ControllerBase
     //LOGS
 
     // Single unified logging method
-    private async Task<int>LogAction(string action, string tableName, int recordId, string userName = "Unknown")
+    private async Task<int> LogAction(string action, string tableName, int recordId, string userName = "Unknown")
     {
         using var connection = new MySqlConnection(_connectionString);
-        var sql = "INSERT INTO Logs (Action, TableName, RecordId, UserName) VALUES (@Action, @TableName, @RecordId, @UserName)";
+        var sql = "INSERT INTO Logs (Action, TableName, RecordId, UserName, Timestamp) VALUES (@Action, @TableName, @RecordId, @UserName, NOW())";
 
         return await connection.ExecuteAsync(sql, new
         {
@@ -1746,7 +1960,7 @@ public class DatabaseController : ControllerBase
         });
     }
 
-   
+
 
     [HttpGet("GetLogs")]
     public async Task<ActionResult<IEnumerable<LogsDto>>>GetLogs()
@@ -1792,24 +2006,24 @@ public class UserLogin
         public string Password { get; set; }
     }
 
-    //CATEGORY
-    public class Categorydto
-    {
-        public int CategoryId { get; set; }
-        public string CategoryLegalCase { get; set; }
-        public string CategoryRepublicAct { get; set; }
-        public string CategoryNatureCase { get; set; }
-    }
+//CATEGORY
+public class Categorydto
+{
+    public int CategoryId { get; set; }
+    public string CategoryLegalCase { get; set; }  // Must match alias
+    public string CategoryRepublicAct { get; set; } // Must match alias
+    public string CategoryNatureCase { get; set; }  // Must match alias
+}
 
-    //TASK
-    public class Tasksdto
-    {
-        public int ScheduleId { get; set; }
-        public string ScheduleTaskTitle { get; set; }
-        public string ScheduleTaskDescription { get; set; }
-        public DateTime ScheduleDate { get; set; }
-        public string ScheduleStatus { get; set; }
-    }
+//TASK
+public class Tasksdto
+        {
+            public int ScheduleId { get; set; }
+            public string ScheduleTaskTitle { get; set; }
+            public string ScheduleTaskDescription { get; set; }
+            public DateTime ScheduleDate { get; set; }
+            public string ScheduleStatus { get; set; }
+        }
 
     //HEARING
     public class Hearingdto
@@ -1859,13 +2073,26 @@ public class UserLogin
 
 }
 
-    //LOGS-DTO
-    public class LogsDto
-    {
-        public int LogId { get; set; }
-        public string Action { get; set; } = string.Empty;
-        public string TableName { get; set; } = string.Empty;
-        public int RecordId { get; set; }
-        public string UserName { get; set; } = string.Empty;
-        public DateTime Timestamp { get; set; }
-    }
+//LOGS-DTO
+public class LogsDto
+{
+    public int LogId { get; set; }
+    public string Action { get; set; }
+    public string TableName { get; set; }
+    public int RecordId { get; set; }
+    public string UserName { get; set; }
+    public DateTime Timestamp { get; set; }
+}
+
+
+public class UserEditRequest
+{
+    public UserDto User { get; set; }
+    public string UserName { get; set; } // The user performing the edit
+}
+
+public class EditCategoryRequest
+{
+    public Categorydto Category { get; set; }
+    public string UserName { get; set; }
+}
