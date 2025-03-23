@@ -185,40 +185,67 @@ public class TaskController : ControllerBase
 
     //button
     [HttpDelete("DeleteTasks/{id}")]
-    public async Task<IActionResult> DeleteTasks(int id)
+    public async Task<IActionResult> DeleteTasks(int id, [FromHeader(Name = "UserName")] string userName = "System")
     {
         if (id <= 0)
         {
             return BadRequest("Invalid task ID.");
         }
 
-        using var con = new MySqlConnection(_connectionString);
-        await con.OpenAsync();
+        using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync();
 
-        // Retrieve task details before deletion
-        string selectQuery = "SELECT * FROM Tasks WHERE sched_Id = @ScheduleId";
-        var task = await con.QueryFirstOrDefaultAsync(selectQuery, new { ScheduleId = id });
-
-        if (task == null)
+        try
         {
-            return NotFound("No task found with the selected ID.");
+            // Fetch task details before deletion
+            var existingTask = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                "SELECT sched_taskTitle, sched_taskDescription, sched_date, sched_status FROM Tasks WHERE sched_Id = @ScheduleId",
+                new { ScheduleId = id });
+
+            if (existingTask == null)
+            {
+                return NotFound($"No task found with ID {id}.");
+            }
+
+            // Extract task details safely
+            string taskTitle = existingTask?.sched_taskTitle ?? "N/A";
+            string taskDescription = existingTask?.sched_taskDescription ?? "N/A";
+            string taskDate = existingTask?.sched_date != null ? ((DateTime)existingTask.sched_date).ToString("yyyy-MM-dd") : "N/A";
+            string taskStatus = existingTask?.sched_status ?? "N/A";
+
+            // Delete task
+            string deleteQuery = "DELETE FROM Tasks WHERE sched_Id = @ScheduleId";
+            int rowsAffected = await connection.ExecuteAsync(deleteQuery, new { ScheduleId = id });
+
+            if (rowsAffected > 0)
+            {
+                Console.WriteLine($"Task ID {id} deleted successfully by {userName}.");
+
+                // Log deletion details similarly to update
+                List<string> changes = new List<string>
+            {
+                $"Title: \"{taskTitle}\"",
+                $"Description: \"{taskDescription}\"",
+                $"Date: \"{taskDate}\"",
+                $"Status: \"{taskStatus}\""
+            };
+
+                string logMessage = $"Deleted task record (ID: {id})";
+                string details = string.Join(", ", changes);
+                await Logger.LogAction(logMessage, "Tasks", id, userName, details);
+
+                return Ok(new { Message = $"Task with ID {id} deleted successfully." });
+            }
+
+            return StatusCode(500, "An error occurred while deleting the task.");
         }
-
-        // Delete task
-        string deleteQuery = "DELETE FROM Tasks WHERE sched_Id = @ScheduleId";
-        int rowsAffected = await con.ExecuteAsync(deleteQuery, new { ScheduleId = id });
-
-        if (rowsAffected > 0)
+        catch (Exception ex)
         {
-            // Log the deleted task details
-            string details = $"Deleted Task: {task.sched_Id}, {task.taskName}, {task.taskDescription}, {task.taskDate}, {task.taskTime}";
-            await Logger.LogAction("Delete", "Tasks", id, "System", details);
-
-            return Ok("Task has been deleted successfully.");
+            Console.WriteLine($"Error deleting task entry: {ex.Message}");
+            return StatusCode(500, new { Message = "Error deleting task entry.", ErrorDetails = ex.Message });
         }
-
-        return StatusCode(500, "An error occurred while deleting the task.");
     }
+
 
     //for Datagridview
     [HttpGet("GetTasks")]

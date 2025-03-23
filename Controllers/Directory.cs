@@ -163,9 +163,11 @@ public class DirectoryController : ControllerBase
     }
 
     [HttpDelete("DeleteDirectory/{id}")]
-    public async Task<IActionResult> DeleteDirectory(int id, [FromHeader(Name = "UserName")] string userName = "System")
+    public async Task<IActionResult> DeleteDirectory(
+     int id,
+     [FromHeader(Name = "UserName")] string userName)
     {
-        Console.WriteLine($"DeleteDirectory called with ID: {id}"); // Log when the route is hit
+        Console.WriteLine($"DeleteDirectory called with ID: {id} by {userName}");
 
         if (id <= 0)
         {
@@ -178,36 +180,57 @@ public class DirectoryController : ControllerBase
         try
         {
             // Retrieve directory details before deletion
-            string selectQuery = "SELECT * FROM Directory WHERE directory_Id = @DirectoryId";
-            var directory = await con.QueryFirstOrDefaultAsync(selectQuery, new { DirectoryId = id });
+            string selectQuery = @"SELECT 
+            directory_Id AS DirectoryId,
+            direct_name AS DirectoryName,
+            direct_position AS DirectoryPosition,
+            direct_contact AS DirectoryContact,
+            direct_email AS DirectoryEmail,
+            direct_status AS DirectoryStatus
+        FROM Directory WHERE directory_Id = @Id";
+
+            var directory = await con.QueryFirstOrDefaultAsync<DirectoryDto>(selectQuery, new { Id = id });
 
             if (directory == null)
             {
-                return NotFound("No directory found with the selected ID.");
+                Console.WriteLine($"No directory found for ID: {id}");
+                return NotFound($"No directory found with the ID {id}.");
             }
 
-            // Delete the directory record
-            string deleteQuery = "DELETE FROM Directory WHERE directory_Id = @DirectoryId";
-            int rowsAffected = await con.ExecuteAsync(deleteQuery, new { DirectoryId = id });
+            // Delete the directory entry
+            string deleteQuery = "DELETE FROM Directory WHERE directory_Id = @Id";
+            int rowsAffected = await con.ExecuteAsync(deleteQuery, new { Id = id });
 
             if (rowsAffected > 0)
             {
-                // Log the deleted directory details
-                string details = $"Deleted Directory: ID={directory.directory_Id}, Name={directory.directory_Name}, Contact={directory.directory_Contact}, Address={directory.directory_Address}";
-                await Logger.LogAction("Delete", "Directory", id, userName, details);
+                Console.WriteLine($"Directory ID {id} deleted successfully by {userName}.");
 
-                return Ok("Directory entry has been deleted successfully.");
+                // Collect deletion details
+                string details = $"Deleted Directory (ID: {id}): " +
+                                 $"Name: \"{directory.DirectoryName}\", " +
+                                 $"Position: \"{directory.DirectoryPosition}\", " +
+                                 $"Contact: \"{directory.DirectoryContact}\", " +
+                                 $"Email: \"{directory.DirectoryEmail}\", " +
+                                 $"Status: \"{directory.DirectoryStatus}\"";
+
+                await Logger.LogAction("Deleted Directory", "Directory", id, userName, details);
+
+                return Ok(new
+                {
+                    Message = "Directory entry deleted successfully.",
+                    DeletedData = directory
+                });
             }
-            else
-            {
-                return NotFound("No directory found with the selected ID.");
-            }
+
+            return StatusCode(500, "An error occurred while deleting the directory entry.");
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"An error occurred while deleting the directory: {ex.Message}");
+            Console.WriteLine($"Error deleting directory entry: {ex.Message}");
+            return StatusCode(500, new { Message = "An error occurred while deleting the directory entry.", ErrorDetails = ex.Message });
         }
     }
+
 
 
     [HttpGet("GetDirectories")]

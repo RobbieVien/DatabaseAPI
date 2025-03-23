@@ -134,9 +134,10 @@ public class CategoryController : ControllerBase
         return NotFound("No category found with the specified ID.");
     }
 
-
     [HttpDelete("DeleteCategory/{id}")]
-    public async Task<IActionResult> DeleteCategory(int id)
+    public async Task<IActionResult> DeleteCategory(
+        int id,
+        [FromHeader(Name = "UserName")] string userName)
     {
         if (id <= 0)
         {
@@ -147,12 +148,19 @@ public class CategoryController : ControllerBase
         await con.OpenAsync();
 
         // Retrieve the category details before deletion
-        string selectQuery = "SELECT * FROM Category WHERE cat_Id = @CategoryId";
-        var category = await con.QueryFirstOrDefaultAsync(selectQuery, new { CategoryId = id });
+        string selectQuery = @"SELECT 
+        cat_Id AS CategoryId,
+        cat_legalcase AS CategoryLegalCase,
+        cat_republicAct AS CategoryRepublicAct,
+        cat_natureCase AS CategoryNatureCase 
+        FROM Category WHERE cat_Id = @CategoryId";
+
+        var category = await con.QueryFirstOrDefaultAsync<Categorydto>(selectQuery, new { CategoryId = id });
 
         if (category == null)
         {
-            return NotFound("No category found with the selected ID.");
+            Console.WriteLine($"No category found for ID: {id}");
+            return NotFound("No category found with the specified ID.");
         }
 
         // Delete the category
@@ -161,15 +169,26 @@ public class CategoryController : ControllerBase
 
         if (rowsAffected > 0)
         {
-            // Log the deleted category details
-            string details = $"Deleted category: {category.cat_Id}, {category.cat_LegalCase}, {category.cat_RepublicAct}, {category.cat_NatureCase}";
-            await Logger.LogAction("Delete", "Category", id, "System", details);
+            Console.WriteLine($"Category {id} deleted successfully by {userName}.");
 
-            return Ok("Category has been deleted successfully.");
+            // Collect deletion details
+            string details = $"Deleted category (ID: {id}): " +
+                             $"Legal Case: \"{category.CategoryLegalCase}\", " +
+                             $"Republic Act: \"{category.CategoryRepublicAct}\", " +
+                             $"Nature Case: \"{category.CategoryNatureCase}\"";
+
+            await Logger.LogAction("Deleted category", "Category", id, userName, details);
+
+            return Ok(new
+            {
+                Message = "Category deleted successfully.",
+                DeletedData = category
+            });
         }
 
         return StatusCode(500, "An error occurred while deleting the category.");
     }
+
 
 
     //ForTheDatagridview

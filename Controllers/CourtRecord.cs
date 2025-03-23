@@ -187,7 +187,9 @@ public class CourtRecordController : ControllerBase
     }
 
     [HttpDelete("DeleteCourtRecord/{id}")]
-    public async Task<IActionResult> DeleteCourtRecord(int id)
+    public async Task<IActionResult> DeleteCourtRecord(
+    int id,
+    [FromHeader(Name = "UserName")] string userName)
     {
         if (id <= 0)
         {
@@ -200,11 +202,19 @@ public class CourtRecordController : ControllerBase
         try
         {
             // Retrieve the court record details before deletion
-            string selectQuery = "SELECT * FROM COURTRECORD WHERE courtRecord_Id = @Id";
-            var courtRecord = await con.QueryFirstOrDefaultAsync(selectQuery, new { Id = id });
+            string selectQuery = @"SELECT 
+            courtRecord_Id AS CourtRecordId,
+            rec_Case_Number AS RecordCaseNumber,
+            rec_Case_Title AS RecordCaseTitle,
+            rec_Nature_Case AS RecordNatureCase,
+            rec_Case_Status AS RecordCaseStatus
+        FROM COURTRECORD WHERE courtRecord_Id = @Id";
+
+            var courtRecord = await con.QueryFirstOrDefaultAsync<CourtRecorddto>(selectQuery, new { Id = id });
 
             if (courtRecord == null)
             {
+                Console.WriteLine($"No court record found for ID: {id}");
                 return NotFound($"Court record with ID {id} not found.");
             }
 
@@ -214,22 +224,33 @@ public class CourtRecordController : ControllerBase
 
             if (rowsAffected > 0)
             {
-                // Log the deleted court record details
-                string details = $"Deleted court record: ID={courtRecord.courtRecord_Id}, Case Number={courtRecord.record_CaseNumber}, Title={courtRecord.record_CaseTitle}";
-                await Logger.LogAction("Delete", "CourtRecord", id, "System", details);
+                Console.WriteLine($"Court record {id} deleted successfully by {userName}.");
 
-                return Ok($"Court record with ID {id} deleted successfully.");
+                // Collect deletion details
+                string details = $"Deleted court record (ID: {id}): " +
+                                 $"Case Number: \"{courtRecord.RecordCaseNumber}\", " +
+                                 $"Title: \"{courtRecord.RecordCaseTitle}\", " +
+                                 $"Nature Case: \"{courtRecord.RecordNatureCase}\", " +
+                                 $"Status: \"{courtRecord.RecordCaseStatus}\"";
+
+                await Logger.LogAction("Deleted Court Record", "CourtRecord", id, userName, details);
+
+                return Ok(new
+                {
+                    Message = "Court record deleted successfully.",
+                    DeletedData = courtRecord
+                });
             }
-            else
-            {
-                return NotFound($"Court record with ID {id} could not be deleted.");
-            }
+
+            return StatusCode(500, "An error occurred while deleting the court record.");
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"An error occurred while deleting the court record: {ex.Message}");
+            Console.WriteLine($"Error deleting court record: {ex.Message}");
+            return StatusCode(500, new { Message = "An error occurred while deleting the court record.", ErrorDetails = ex.Message });
         }
     }
+
 
     //COUNT-ACTIVE-CASE-RECORDS
     [HttpGet("CountCaseRecordsActive")]

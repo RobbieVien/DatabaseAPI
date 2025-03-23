@@ -159,49 +159,75 @@ public class HearingController : ControllerBase
     [HttpDelete("DeleteHearing/{id}")]
     public async Task<IActionResult> DeleteHearing(int id, [FromHeader(Name = "UserName")] string userName = "System")
     {
-        Console.WriteLine($"DeleteHearing called with ID: {id}"); // Log when the route is hit
+        Console.WriteLine($"DeleteHearing called with ID: {id} by {userName}");
 
         if (id <= 0)
         {
             return BadRequest("Invalid hearing ID.");
         }
 
-        using var con = new MySqlConnection(_connectionString);
-        await con.OpenAsync();
+        using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync();
 
         try
         {
-            // Retrieve the hearing details before deletion
-            string selectQuery = "SELECT * FROM Hearing WHERE hearing_Id = @HearingId";
-            var hearing = await con.QueryFirstOrDefaultAsync(selectQuery, new { HearingId = id });
+            // Fetch old values before deletion
+            var existingHearing = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                "SELECT hearing_Case_Title, hearing_Case_Num, hearing_case_status, hearing_Case_Date, hearing_Case_Time " +
+                "FROM Hearing WHERE hearing_Id = @HearingId",
+                new { HearingId = id });
 
-            if (hearing == null)
+            if (existingHearing == null)
             {
-                return NotFound("No hearing found with the selected ID.");
+                Console.WriteLine($"No hearing found for ID: {id}");
+                return NotFound($"No hearing found with the ID {id}.");
             }
 
-            // Delete the hearing record
+            // Extract old values
+            string oldCaseTitle = existingHearing?.hearing_Case_Title ?? "";
+            string oldCaseNumber = existingHearing?.hearing_Case_Num ?? "";
+            string oldCaseStatus = existingHearing?.hearing_case_status ?? "";
+
+            // Handle date and time separately to avoid type conversion issues
+            string oldCaseDate = existingHearing?.hearing_Case_Date != null ? ((DateTime)existingHearing.hearing_Case_Date).ToString("yyyy-MM-dd") : "N/A";
+            string oldCaseTime = existingHearing?.hearing_Case_Time != null ? ((TimeSpan)existingHearing.hearing_Case_Time).ToString(@"hh\:mm\:ss") : "N/A";
+
+            // Delete the hearing entry
             string deleteQuery = "DELETE FROM Hearing WHERE hearing_Id = @HearingId";
-            int rowsAffected = await con.ExecuteAsync(deleteQuery, new { HearingId = id });
+            int rowsAffected = await connection.ExecuteAsync(deleteQuery, new { HearingId = id });
 
             if (rowsAffected > 0)
             {
-                // Log the deleted hearing details
-                string details = $"Deleted Hearing: ID={hearing.hearing_Id}, Date={hearing.hearing_Date}, Time={hearing.hearing_Time}, Case ID={hearing.case_Id}";
-                await Logger.LogAction("Delete", "Hearing", id, userName, details);
+                Console.WriteLine($"Hearing ID {id} deleted successfully by {userName}.");
 
-                return Ok("Hearing has been deleted successfully.");
-            }
-            else
+                // Log deletion details similar to update
+                List<string> changes = new List<string>
             {
-                return NotFound("No hearing found with the selected ID.");
+                $"Date: \"{oldCaseDate}\"",
+                $"Time: \"{oldCaseTime}\"",
+                $"Case Title: \"{oldCaseTitle}\"",
+                $"Case Number: \"{oldCaseNumber}\"",
+                $"Case Status: \"{oldCaseStatus}\""
+            };
+
+                string logMessage = $"Deleted hearing record (ID: {id})";
+                string details = string.Join(", ", changes);
+                await Logger.LogAction(logMessage, "HEARING", id, userName, details);
+
+                return Ok(new { Message = $"Hearing entry with ID {id} deleted successfully." });
             }
+
+            return StatusCode(500, "No changes were made.");
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"An error occurred while deleting the hearing: {ex.Message}");
+            Console.WriteLine($"Error deleting hearing entry: {ex.Message}");
+            return StatusCode(500, new { Message = "Error deleting hearing entry.", ErrorDetails = ex.Message });
         }
     }
+
+
+
 
     [HttpGet("GetHearing")]
     public async Task<IActionResult> GetHearing()

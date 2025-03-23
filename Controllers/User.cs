@@ -227,33 +227,72 @@ public class UserController : ControllerBase
 
 
     [HttpDelete("DeleteUser/{id}")]
-    public async Task<IActionResult> DeleteUser(int id)
+    public async Task<IActionResult> DeleteUser(int id, [FromHeader(Name = "UserName")] string userName = "System")
     {
-        Console.WriteLine($"DeleteUser called with ID: {id}");
-
         if (id <= 0)
         {
             return BadRequest("Invalid user ID.");
         }
 
-        using var con = new MySqlConnection(_connectionString);
-        await con.OpenAsync();
+        using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync();
 
-        string deleteQuery = "DELETE FROM ManageUsers WHERE user_Id = @UserId";
-        int rowsAffected = await con.ExecuteAsync(deleteQuery, new { UserId = id });
-
-        if (rowsAffected > 0)
+        try
         {
-            await Logger.LogAction("Delete", "ManageUsers", id, "System", "User deleted");
-            return Ok("User has been deleted successfully.");
-        }
+            // Fetch user details before deletion
+            var existingUser = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                "SELECT user_Fname, user_Lname, user_Role, user_Status, user_Name FROM ManageUsers WHERE user_Id = @UserId",
+                new { UserId = id });
 
-        return NotFound("No user found with the selected ID.");
+            if (existingUser == null)
+            {
+                return NotFound($"No user found with ID {id}.");
+            }
+
+            // Extract user details safely
+            string firstName = existingUser?.user_Fname ?? "N/A";
+            string lastName = existingUser?.user_Lname ?? "N/A";
+            string role = existingUser?.user_Role ?? "N/A";
+            string status = existingUser?.user_Status ?? "N/A";
+            string username = existingUser?.user_Name ?? "N/A";
+
+            // Delete user
+            string deleteQuery = "DELETE FROM ManageUsers WHERE user_Id = @UserId";
+            int rowsAffected = await connection.ExecuteAsync(deleteQuery, new { UserId = id });
+
+            if (rowsAffected > 0)
+            {
+                Console.WriteLine($"User ID {id} deleted successfully by {userName}.");
+
+                // Log deletion details
+                List<string> changes = new List<string>
+            {
+                $"Name: {firstName} {lastName}",
+                $"Role: {role}",
+                $"Status: {status}",
+                $"Username: {username}"
+            };
+
+                string logMessage = $"Deleted user record (ID: {id})";
+                string details = string.Join(", ", changes);
+                await Logger.LogAction(logMessage, "ManageUsers", id, userName, details);
+
+                return Ok(new { Message = $"User with ID {id} deleted successfully." });
+            }
+
+            return StatusCode(500, "An error occurred while deleting the user.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error deleting user entry: {ex.Message}");
+            return StatusCode(500, new { Message = "Error deleting user entry.", ErrorDetails = ex.Message });
+        }
     }
+
 
     //----------------------------------------------------------------------------------------------------------------
 
-   
+
     //for DataGridview
     [HttpGet("GetUsers")]
     public async Task<IActionResult> GetUsers()
