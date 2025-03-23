@@ -8,6 +8,8 @@ using Dapper;
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Cryptography.KeyDerivation;
 using System.Security.Claims;
+using DatabaseAPI.Models;
+using DatabaseAPI.Utilities;
 
 
 
@@ -21,60 +23,6 @@ public class DatabaseController : ControllerBase
     {
         _connectionString = configuration.GetConnectionString("DefaultConnection") ?? string.Empty; // Prevent null warning
     }
-
-
-    public static class PasswordHasher
-    {
-        public static string HashPassword(string password)
-        {
-            byte[] salt = new byte[16];
-            using (var rng = RandomNumberGenerator.Create())
-            {
-                rng.GetBytes(salt);
-            }
-
-            byte[] hash = KeyDerivation.Pbkdf2(
-                password: password,
-                salt: salt,
-                prf: KeyDerivationPrf.HMACSHA256,
-                iterationCount: 100000,
-                numBytesRequested: 32
-            );
-
-            return Convert.ToBase64String(salt) + ":" + Convert.ToBase64String(hash);
-        }
-
-        public static bool VerifyPassword(string password, string storedHash)
-        {
-            if (string.IsNullOrWhiteSpace(storedHash) || !storedHash.Contains(":"))
-                return false;  // Invalid format
-
-            string[] parts = storedHash.Split(':');
-            if (parts.Length != 2) return false;
-
-            try
-            {
-                byte[] salt = Convert.FromBase64String(parts[0].Trim());
-                byte[] storedPasswordHash = Convert.FromBase64String(parts[1].Trim());
-
-                byte[] hash = KeyDerivation.Pbkdf2(
-                    password: password,
-                    salt: salt,
-                    prf: KeyDerivationPrf.HMACSHA256,
-                    iterationCount: 100000,
-                    numBytesRequested: 32
-                );
-
-                return CryptographicOperations.FixedTimeEquals(hash, storedPasswordHash);
-            }
-            catch (FormatException)
-            {
-                Console.WriteLine("⚠️ Error: Stored password format is incorrect.");
-                return false;
-            }
-        }
-    }
-
 
     // LOGIN
     [HttpPost("Login")]
@@ -2002,6 +1950,102 @@ public class DatabaseController : ControllerBase
         }
     }
 
+    [HttpGet("GetAllRecords")]
+    public async Task<ActionResult<IEnumerable<CourtRecorddto>>> GetAllRecords()
+    {
+        string modifiedConnectionString = _connectionString;
+
+        if (!modifiedConnectionString.Contains("Allow Zero Datetime=true"))
+        {
+            var connBuilder = new MySqlConnectionStringBuilder(modifiedConnectionString)
+            {
+                AllowZeroDateTime = true,
+                ConvertZeroDateTime = true
+            };
+            modifiedConnectionString = connBuilder.ConnectionString;
+        }
+
+        await using var con = new MySqlConnection(modifiedConnectionString);
+        await con.OpenAsync();
+
+        string query = @"
+        SELECT 
+            courtRecord_Id,
+            rec_Case_Number, 
+            rec_Case_Title, 
+            rec_Date_Inputted,
+            rec_Time_Inputted,
+            rec_Date_Filed_Occ,
+            rec_Date_Filed_Received,
+            rec_Transferred,
+            rec_Case_Status,
+            rec_Nature_Case,
+            rec_Nature_Descrip
+        FROM COURTRECORD";
+
+        await using var cmd = new MySqlCommand(query, con);
+
+        try
+        {
+            var results = new List<CourtRecorddto>();
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                var courtRecord = new CourtRecorddto
+                {
+                    CourtRecordId = reader.IsDBNull(reader.GetOrdinal("courtRecord_Id")) ? 0 : reader.GetInt32(reader.GetOrdinal("courtRecord_Id")),
+                    RecordCaseNumber = reader.IsDBNull(reader.GetOrdinal("rec_Case_Number")) ? string.Empty : reader.GetString(reader.GetOrdinal("rec_Case_Number")),
+                    RecordCaseTitle = reader.IsDBNull(reader.GetOrdinal("rec_Case_Title")) ? string.Empty : reader.GetString(reader.GetOrdinal("rec_Case_Title")),
+                    RecordTransfer = reader.IsDBNull(reader.GetOrdinal("rec_Transferred")) ? string.Empty : reader.GetString(reader.GetOrdinal("rec_Transferred")),
+                    RecordCaseStatus = reader.IsDBNull(reader.GetOrdinal("rec_Case_Status")) ? string.Empty : reader.GetString(reader.GetOrdinal("rec_Case_Status")),
+                    RecordNatureCase = reader.IsDBNull(reader.GetOrdinal("rec_Nature_Case")) ? string.Empty : reader.GetString(reader.GetOrdinal("rec_Nature_Case")),
+                    RecordNatureDescription = reader.IsDBNull(reader.GetOrdinal("rec_Nature_Descrip")) ? string.Empty : reader.GetString(reader.GetOrdinal("rec_Nature_Descrip"))
+                };
+
+                // Handle rec_Date_Inputted as string
+                courtRecord.RecordDateInputted = reader.IsDBNull(reader.GetOrdinal("rec_Date_Inputted"))
+                    ? string.Empty
+                    : Convert.ToDateTime(reader.GetValue(reader.GetOrdinal("rec_Date_Inputted"))).ToString("yyyy-MM-dd");
+
+                // Handle rec_Time_Inputted as string
+                var timeInputted = reader.GetValue(reader.GetOrdinal("rec_Time_Inputted"));
+                courtRecord.RecordTimeInputted = timeInputted switch
+                {
+                    TimeSpan timeSpan => timeSpan.ToString(@"hh\:mm\:ss"),
+                    DateTime dateTime => dateTime.ToString("HH:mm:ss"),
+                    _ => timeInputted != DBNull.Value ? timeInputted.ToString() : string.Empty
+                };
+
+                // Handle rec_Date_Filed_Occ as string
+                courtRecord.RecordDateFiledOCC = reader.IsDBNull(reader.GetOrdinal("rec_Date_Filed_Occ"))
+                    ? null
+                    : Convert.ToDateTime(reader.GetValue(reader.GetOrdinal("rec_Date_Filed_Occ"))).ToString("yyyy-MM-dd");
+
+                // Handle rec_Date_Filed_Received as string
+                courtRecord.RecordDateFiledReceived = reader.IsDBNull(reader.GetOrdinal("rec_Date_Filed_Received"))
+                    ? null
+                    : Convert.ToDateTime(reader.GetValue(reader.GetOrdinal("rec_Date_Filed_Received"))).ToString("yyyy-MM-dd");
+
+                results.Add(courtRecord);
+            }
+
+            return Ok(results);
+        }
+        catch (Exception ex)
+        {
+            string innerExceptionMessage = ex.InnerException != null ? ex.InnerException.Message : "No inner exception";
+            return StatusCode(500, new
+            {
+                Message = "Error retrieving records",
+                ErrorDetails = ex.Message,
+                InnerException = innerExceptionMessage,
+                StackTrace = ex.StackTrace
+            });
+        }
+    }
+
+
     //FILTER-COURT-HEARINGS
     [HttpGet("FilterHearings")]
     public async Task<IActionResult> FilterHearings(string All)
@@ -2090,119 +2134,3 @@ public class DatabaseController : ControllerBase
 
 
 
-//-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-// DTO Query
-
-// Model to receive login requests
-public class UserLogin
-{
-    public string UserName { get; set; }
-    public string Password { get; set; }
-}
-
-
-//USER
-public class UserDto
-    {
-        public int UserId { get; set; }
-        public string FirstName { get; set; }
-        public string LastName { get; set; }
-        public string Role { get; set; }
-        public string Status { get; set; }
-        public string UserName { get; set; }
-        public string Password { get; set; }
-    }
-
-//CATEGORY
-public class Categorydto
-{
-    public int CategoryId { get; set; }
-    public string CategoryLegalCase { get; set; }  // Must match alias
-    public string CategoryRepublicAct { get; set; } // Must match alias
-    public string CategoryNatureCase { get; set; }  // Must match alias
-}
-
-//TASK
-public class Tasksdto
-        {
-            public int ScheduleId { get; set; }
-            public string ScheduleTaskTitle { get; set; }
-            public string ScheduleTaskDescription { get; set; }
-            public DateTime ScheduleDate { get; set; }
-            public string ScheduleStatus { get; set; }
-        }
-
-    //HEARING
-    public class Hearingdto
-    {
-        public int HearingId { get; set; }
-        public string HearingCaseTitle { get; set; }
-        public string HearingCaseNumber { get; set; }
-        public string HearingCaseStatus { get; set; }
-        public string HearingCaseDate { get; set; } = string.Empty; // Format: "yyyy-MM-dd"
-        public string HearingCaseTime { get; set; } = string.Empty; // Format: "HH:mm:ss"
-}
-
-    //COURTRECORD
-    public class CourtRecorddto
-{
-    public int CourtRecordId { get; set; }
-    public string RecordCaseNumber { get; set; } = string.Empty;
-    public string RecordCaseTitle { get; set; } = string.Empty;
-    public string RecordDateInputted { get; set; } = string.Empty; // Format: "yyyy-MM-dd"
-    public string RecordTimeInputted { get; set; } = string.Empty; // Format: "HH:mm:ss"
-    public string? RecordDateFiledOCC { get; set; }  // Format: "yyyy-MM-dd" 
-    public string? RecordDateFiledReceived { get; set; }  // Format: "yyyy-MM-dd"
-    public string RecordTransfer { get; set; } = string.Empty;
-    public string RecordCaseStatus { get; set; } = string.Empty;
-    public string RecordNatureCase { get; set; } = string.Empty;
-    public string RecordNatureDescription { get; set; } = string.Empty;
-}
-
-    //DIRECTORY
-    public class DirectoryDto
-    {
-        public int DirectoryId { get; set; }
-        public string DirectoryName { get; set; }
-        public string DirectoryPosition { get; set; }
-        public string DirectoryContact { get; set; }
-        public string DirectoryEmail { get; set; }
-        public string DirectoryStatus { get; set; }
-    }
-
-    //NOT-USED-YET-REPORT
-    public class ReportDto
-{
-    public int ReportId { get; set; }
-    public string ReportNatureCase { get; set; }
-    public string DirectoryPosition { get; set; }
-    public int CourtRecord_LinkId { get; set; }
-
-}
-
-//LOGS-DTO
-public class LogsDto
-{
-    public int LogId { get; set; }
-    public string Action { get; set; }
-    public string TableName { get; set; }
-    public int RecordId { get; set; }
-    public string UserName { get; set; }
-    public DateTime Timestamp { get; set; }
-    public string Details { get; set; } // Added column
-
-}
-
-
-public class UserEditRequest
-{
-    public UserDto User { get; set; }
-    public string UserName { get; set; } // The user performing the edit
-}
-
-public class EditCategoryRequest
-{
-    public Categorydto Category { get; set; }
-    public string UserName { get; set; }
-}

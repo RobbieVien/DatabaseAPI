@@ -2,8 +2,12 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using DatabaseAPI.Utilities;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Initialize the Logger (This is where Logger.Initialize should be called)
+Logger.Initialize(builder.Configuration);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -15,16 +19,9 @@ builder.Services.AddCors(options =>
                           .AllowAnyMethod()
                           .AllowAnyHeader());
 });
-builder.Services.AddControllers()
-    .AddJsonOptions(options =>
-    {
-        options.JsonSerializerOptions.Converters.Add(new TimeOnlyJsonConverter());
-        options.JsonSerializerOptions.Converters.Add(new DateOnlyJsonConverter());
-    });
 
 var app = builder.Build();
 
-// Enable Swagger in production for debugging
 if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
 {
     app.UseSwagger();

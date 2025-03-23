@@ -1,0 +1,31 @@
+﻿using Microsoft.AspNetCore.Mvc;
+using MySqlConnector;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
+using Dapper;
+using DatabaseAPI.Models;
+using System.Collections.Generic;
+
+namespace DatabaseAPI.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    public class LogsController : ControllerBase
+    {
+        private readonly string _connectionString;
+
+        public LogsController(IConfiguration configuration)
+        {
+            _connectionString = configuration.GetConnectionString("DefaultConnection") ?? string.Empty;
+        }
+
+        [HttpGet("GetLogs")]
+        public async Task<ActionResult<IEnumerable<LogsDto>>> GetLogs()
+        {
+            using var connection = new MySqlConnection(_connectionString);
+            var sql = "SELECT * FROM Logs ORDER BY Timestamp DESC";
+            var logs = await connection.QueryAsync<LogsDto>(sql);
+            return Ok(logs);
+        }
+    }
+}
