@@ -319,4 +319,59 @@ public class HearingController : ControllerBase
             return StatusCode(500, new { message = $"Error filtering hearings: {ex.Message}" });
         }
     }
+
+    //This is for comboBox in Hearing 
+    [HttpGet("GetCaseTitle")]
+    public async Task<ActionResult<IEnumerable<CaseTitleReportdto>>> GetCaseTitle()
+    {
+        string modifiedConnectionString = _connectionString;
+
+        if (!modifiedConnectionString.Contains("Allow Zero Datetime=true"))
+        {
+            var connBuilder = new MySqlConnectionStringBuilder(modifiedConnectionString)
+            {
+                AllowZeroDateTime = true,
+                ConvertZeroDateTime = true
+            };
+            modifiedConnectionString = connBuilder.ConnectionString;
+        }
+
+        await using var con = new MySqlConnection(modifiedConnectionString);
+        await con.OpenAsync();
+
+        string query = "SELECT rec_Case_Title FROM COURTRECORD";
+
+        await using var cmd = new MySqlCommand(query, con);
+
+        try
+        {
+            var results = new List<CaseTitleReportdto>();
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                results.Add(new CaseTitleReportdto
+                {
+                    RecordCaseTitle = reader.IsDBNull(reader.GetOrdinal("rec_Case_Title"))
+                        ? string.Empty
+                        : reader.GetString(reader.GetOrdinal("rec_Case_Title"))
+                });
+            }
+
+            return Ok(results);
+        }
+        catch (Exception ex)
+        {
+            string innerExceptionMessage = ex.InnerException != null ? ex.InnerException.Message : "No inner exception";
+            return StatusCode(500, new
+            {
+                Message = "Error retrieving records",
+                ErrorDetails = ex.Message,
+                InnerException = innerExceptionMessage,
+                StackTrace = ex.StackTrace
+            });
+        }
+    }
+
+
 }

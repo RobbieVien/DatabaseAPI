@@ -14,4 +14,9 @@
         public string RecordNatureCase { get; set; } = string.Empty;
         public string RecordNatureDescription { get; set; } = string.Empty;
     }
+
+    public class CaseTitleReportdto
+    {
+        public string RecordCaseTitle { get; set; } = string.Empty;
+    }
 }

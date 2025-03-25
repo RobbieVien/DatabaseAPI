@@ -150,15 +150,6 @@ public class ReportController : ControllerBase
             {
                 var reports = await connection.QueryAsync<ReportDto>(query);
 
-                // Log the retrieval
-                await Logger.LogAction(
-                    action: "SELECT",
-                    tableName: "Report",
-                    recordId: -1, // No specific record ID
-                    userName: User.Identity?.Name ?? "System",
-                    details: $"Retrieved {reports.Count()} reports"
-                );
-
                 return Ok(reports);
             }
         }

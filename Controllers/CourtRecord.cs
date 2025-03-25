@@ -590,4 +590,32 @@ public class CourtRecordController : ControllerBase
         }
     }
 
+    //This is for combo box in CourtRecord
+
+    [HttpGet("ComboBoxCategories")]
+    public async Task<IActionResult> ComboBoxCategories()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = "SELECT cat_republicAct FROM Category";
+        using var cmd = new MySqlCommand(query, con);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+
+        var categories = new List<CategoryRepublicActDto>();
+        while (await reader.ReadAsync())
+        {
+            categories.Add(new CategoryRepublicActDto
+            {
+             
+                CategoryRepublicAct = reader["cat_republicAct"]?.ToString(),
+            });
+        }
+
+        return Ok(categories);
+    }
 }
+
+
+

@@ -318,4 +318,28 @@ public class TaskController : ControllerBase
         int count = await con.ExecuteScalarAsync<int>(query);
         return Ok(count);
     }
+
+    //Combobox get users
+    [HttpGet("GetUsers")]
+    public async Task<IActionResult> GetUsers()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = "SELECT user_Fname, user_Lname FROM ManageUsers";
+        using var cmd = new MySqlCommand(query, con);
+        using var reader = await cmd.ExecuteReaderAsync();
+
+        var users = new List<FullnameDto>();
+        while (await reader.ReadAsync())
+        {
+            users.Add(new FullnameDto
+            {
+                Name = $"{reader["user_Fname"]?.ToString()} {reader["user_Lname"]?.ToString()}".Trim()
+            });
+        }
+
+        return Ok(users);
+    }
+
 }
