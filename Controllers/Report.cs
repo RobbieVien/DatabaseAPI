@@ -140,7 +140,6 @@ public class ReportController : ControllerBase
     SELECT 
         Report_Id,
         Report_NatureCase,
-        CourtRecord_LinkId,
         CaseCount
     FROM Report";
 
@@ -148,7 +147,7 @@ public class ReportController : ControllerBase
         {
             using (var connection = new MySqlConnection(_connectionString))
             {
-                var reports = await connection.QueryAsync<ReportDto>(query);
+                var reports = await connection.QueryAsync<GetReportDto>(query);
 
                 return Ok(reports);
             }

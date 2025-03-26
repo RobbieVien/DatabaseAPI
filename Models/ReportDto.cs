@@ -7,4 +7,10 @@
         public int? CourtRecord_LinkId { get; set; }
         public int CaseCount { get; set; }
     }
+    public class GetReportDto
+    {
+        public int Report_Id { get; set; }
+        public string Report_NatureCase { get; set; }
+        public int CaseCount { get; set; }
+    }
 }

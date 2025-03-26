@@ -40,29 +40,33 @@ public class CourtRecordController : ControllerBase
                 return Conflict("A court record with the same case number already exists.");
             }
 
-            string insertQuery = @"INSERT INTO COURTRECORD (
-                        rec_Case_Number,
-                        rec_Case_Title,
-                        rec_Date_Filed_Occ,
-                        rec_Date_Filed_Received,
-                        rec_Transferred,
-                        rec_Case_Status,
-                        rec_Nature_Case,
-                        rec_Nature_Descrip,
-                        rec_Time_Inputted,
-                        rec_Date_Inputted)
-                    VALUES (
-                        @CaseNumber,
-                        @CaseTitle,
-                        @RecordDateFiledOcc,
-                        @RecordDateFiledReceived,
-                        @RecordTransferred,
-                        @RecordCaseStatus,
-                        @RecordNatureCase,
-                        @RecordNatureDescription,
-                        CURRENT_TIME(),
-                        CURRENT_DATE());
-                    SELECT LAST_INSERT_ID();";
+            var philippinesTime = TimeZoneInfo.ConvertTime(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila"));
+
+            string insertQuery = @"
+                INSERT INTO COURTRECORD (
+                    rec_Case_Number,
+                    rec_Case_Title,
+                    rec_Date_Filed_Occ,
+                    rec_Date_Filed_Received,
+                    rec_Transferred,
+                    rec_Case_Status,
+                    rec_Nature_Case,
+                    rec_Nature_Descrip,
+                    rec_Time_Inputted,
+                    rec_Date_Inputted)
+                VALUES (
+                    @CaseNumber,
+                    @CaseTitle,
+                    @RecordDateFiledOcc,
+                    @RecordDateFiledReceived,
+                    @RecordTransferred,
+                    @RecordCaseStatus,
+                    @RecordNatureCase,
+                    @RecordNatureDescription,
+                    @Timestamp,
+                    @Timestamp
+                );
+                SELECT LAST_INSERT_ID();";
 
             int newRecordId = await con.ExecuteScalarAsync<int>(insertQuery, new
             {
@@ -73,8 +77,10 @@ public class CourtRecordController : ControllerBase
                 RecordTransferred = courtrecord.RecordTransfer,
                 RecordCaseStatus = courtrecord.RecordCaseStatus,
                 RecordNatureCase = courtrecord.RecordNatureCase,
-                RecordNatureDescription = courtrecord.RecordNatureDescription
+                RecordNatureDescription = courtrecord.RecordNatureDescription,
+                Timestamp = philippinesTime
             });
+
 
             if (newRecordId > 0)
             {
