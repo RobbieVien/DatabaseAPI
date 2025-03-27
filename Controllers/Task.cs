@@ -27,53 +27,90 @@ public class TaskController : ControllerBase
             return BadRequest("Invalid Task data.");
         }
 
-        using var con = new MySqlConnection(_connectionString);
-        await con.OpenAsync();
+        // Get Philippine time (UTC+8)
+        DateTime philippineTime = TimeZoneInfo.ConvertTimeFromUtc(
+            DateTime.UtcNow,
+            TimeZoneInfo.FindSystemTimeZoneById("Singapore Standard Time")
+        );
 
-        try
+        using (var con = new MySqlConnection(_connectionString))
         {
-            Console.WriteLine($"Incoming Task: Title={tasks.ScheduleTaskTitle}, Date={tasks.ScheduleDate:yyyy-MM-dd}, Time={tasks.ScheduleDate:HH:mm:ss}");
+            await con.OpenAsync(); // Ensure connection is opened before executing queries.
 
-            // Direct check for task with same title AND date - simplified query
-            string checkQuery = @"SELECT COUNT(*) FROM Tasks 
-                          WHERE sched_taskTitle = @TaskTitle 
-                          AND DATE(sched_date) = DATE(@Date)";
-
-            using var checkCmd = new MySqlCommand(checkQuery, con);
-            checkCmd.Parameters.AddWithValue("@TaskTitle", tasks.ScheduleTaskTitle.Trim());
-            checkCmd.Parameters.AddWithValue("@Date", tasks.ScheduleDate);
-
-            var existingCount = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
-            Console.WriteLine($"Existing Task Count for same title and date: {existingCount}");
-
-            if (existingCount > 0)
+            try
             {
-                return Conflict("A task with the same title and date already exists.");
+                // Check for existing task
+                string checkQuery = @"SELECT COUNT(*) FROM Tasks 
+                                  WHERE sched_taskTitle = @TaskTitle 
+                                  AND DATE(sched_date) = DATE(@Date)";
+
+                var existingCount = await con.ExecuteScalarAsync<int>(
+                    checkQuery,
+                    new
+                    {
+                        TaskTitle = tasks.ScheduleTaskTitle.Trim(),
+                        Date = tasks.ScheduleDate // Use manually inputted date
+                    }
+                );
+
+                if (existingCount > 0)
+                {
+                    return Conflict("A task with the same title and date already exists.");
+                }
+
+                // Insert new task
+                string insertQuery = @"INSERT INTO Tasks (
+                sched_taskTitle,
+                sched_user,
+                sched_taskDescription, 
+                sched_date, 
+                sched_inputted, 
+                sched_status
+            ) VALUES (
+                @TaskTitle,
+                @TaskUser,
+                @TaskDescription, 
+                @Date, 
+                @InputtedTime, 
+                @Status
+            )";
+
+                int rowsAffected = await con.ExecuteAsync(
+                    insertQuery,
+                    new
+                    {
+                        TaskTitle = tasks.ScheduleTaskTitle.Trim(),
+                        TaskUser = tasks.ScheduleUser,
+                        TaskDescription = tasks.ScheduleTaskDescription,
+                        Date = tasks.ScheduleDate, // Keep manually inputted date
+                        InputtedTime = philippineTime, // Always use Philippine time for inputted time
+                        Status = tasks.ScheduleStatus ? 1 : 0 // Convert bool to bit
+                    }
+                );
+
+                if (rowsAffected == 0)
+                {
+                    return StatusCode(500, "Task insertion failed.");
+                }
+
+                // Log the action
+                await Logger.LogAction(
+                    action: "INSERT",
+                    tableName: "Tasks",
+                    recordId: 0, // Assuming no auto-generated ID return
+                    userName: "Admin",
+                    details: $"Task '{tasks.ScheduleTaskTitle}' added successfully."
+                );
+
+                return Ok("Task added successfully.");
             }
-
-            // Insert new task
-            string insertQuery = @"INSERT INTO Tasks (sched_taskTitle, sched_taskDescription, sched_date, sched_status)
-                        VALUES (@TaskTitle, @TaskDescription, @Date, @Status)";
-
-            using var insertCmd = new MySqlCommand(insertQuery, con);
-            insertCmd.Parameters.AddWithValue("@TaskTitle", tasks.ScheduleTaskTitle.Trim());
-            insertCmd.Parameters.AddWithValue("@TaskDescription", tasks.ScheduleTaskDescription);
-            insertCmd.Parameters.AddWithValue("@Date", tasks.ScheduleDate);
-            insertCmd.Parameters.AddWithValue("@Status", tasks.ScheduleStatus);
-
-            await insertCmd.ExecuteNonQueryAsync();
-
-            // Log the action
-            await Logger.LogAction($"Task {tasks.ScheduleTaskTitle} has been added.", "Tasks", 0, "Admin");
-
-            return Ok("Task added successfully.");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error: {ex.Message}");
-            return StatusCode(500, "An error occurred while adding the task.");
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"An error occurred: {ex.Message}");
+            }
         }
     }
+
 
 
 
@@ -81,13 +118,14 @@ public class TaskController : ControllerBase
     public async Task<IActionResult> UpdateTask(int scheduleId, [FromBody] Tasksdto task)
     {
         const string updateQuery = @"
-    UPDATE Tasks 
-    SET 
-        sched_taskTitle = @ScheduleTaskTitle,
-        sched_taskDescription = @ScheduleTaskDescription,
-        sched_date = @ScheduleDate,
-        sched_status = @ScheduleStatus
-    WHERE sched_Id = @ScheduleId";
+        UPDATE Tasks 
+        SET 
+            sched_taskTitle = @ScheduleTaskTitle,
+            sched_user = @ScheduleUser,
+            sched_taskDescription = @ScheduleTaskDescription,
+            sched_date = @ScheduleDate,
+            sched_status = @ScheduleStatus
+        WHERE sched_Id = @ScheduleId";
 
         try
         {
@@ -102,10 +140,30 @@ public class TaskController : ControllerBase
                     return NotFound($"Task with ID {scheduleId} not found");
                 }
 
-                // Get current values for change tracking
+                // Get current values with proper column mapping
                 var originalTask = await connection.QueryFirstOrDefaultAsync<Tasksdto>(
-                    "SELECT * FROM Tasks WHERE sched_Id = @ScheduleId",
+                    @"SELECT 
+                    sched_Id AS ScheduleId,
+                    sched_taskTitle AS ScheduleTaskTitle,
+                    sched_user AS ScheduleUser,
+                    sched_taskDescription AS ScheduleTaskDescription,
+                    sched_date AS ScheduleDate,
+                    sched_status AS ScheduleStatus
+                FROM Tasks 
+                WHERE sched_Id = @ScheduleId",
                     new { ScheduleId = scheduleId });
+
+                if (originalTask == null)
+                {
+                    await Logger.LogAction(
+                        action: "UPDATE_ERROR",
+                        tableName: "Tasks",
+                        recordId: scheduleId,
+                        userName: User.Identity?.Name ?? "System",
+                        details: $"Original task {scheduleId} not found during update"
+                    );
+                    return NotFound($"Task {scheduleId} not found");
+                }
 
                 // Validate date range with buffer
                 var utcNow = DateTime.UtcNow;
@@ -124,56 +182,90 @@ public class TaskController : ControllerBase
                     });
                 }
 
-                // Update task
-                var affectedRows = await connection.ExecuteAsync(updateQuery, new
+                // Update task first
+                await connection.ExecuteAsync(updateQuery, new
                 {
-                    ScheduleId = scheduleId,
                     task.ScheduleTaskTitle,
+                    task.ScheduleUser,
                     task.ScheduleTaskDescription,
-                    ScheduleDate = taskDateUtc,
-                    task.ScheduleStatus
+                    task.ScheduleDate,
+                    task.ScheduleStatus,
+                    ScheduleId = scheduleId
                 });
 
-                if (affectedRows == 0)
+                // Track changes after update
+                var changes = new List<string>();
+
+                // Title comparison with null handling
+                if (originalTask.ScheduleTaskTitle != task.ScheduleTaskTitle)
                 {
-                    return StatusCode(500, "Update failed unexpectedly");
+                    changes.Add($"Title changed from '{originalTask.ScheduleTaskTitle ?? "(empty)"}' to '{task.ScheduleTaskTitle ?? "(empty)"}'");
                 }
 
-                // Build detailed change log
-                var changes = new List<string>();
-                if (originalTask.ScheduleTaskTitle != task.ScheduleTaskTitle)
-                    changes.Add($"Title changed from '{originalTask.ScheduleTaskTitle}' to '{task.ScheduleTaskTitle}'");
-                if (originalTask.ScheduleTaskDescription != task.ScheduleTaskDescription)
-                    changes.Add($"Description changed from '{originalTask.ScheduleTaskDescription}' to '{task.ScheduleTaskDescription}'");
-                if (originalTask.ScheduleDate != task.ScheduleDate)
-                    changes.Add($"Date changed from '{originalTask.ScheduleDate}' to '{task.ScheduleDate}'");
-                if (originalTask.ScheduleStatus != task.ScheduleStatus)
-                    changes.Add($"Status changed from '{originalTask.ScheduleStatus}' to '{task.ScheduleStatus}'");
+                if (originalTask.ScheduleUser != task.ScheduleUser)
+                {
+                    changes.Add($"Title changed from '{originalTask.ScheduleUser ?? "(empty)"}' to '{task.ScheduleUser ?? "(empty)"}'");
+                }
 
-                // Log detailed changes
-                await Logger.LogAction(
-                    action: "UPDATE",
-                    tableName: "Tasks",
-                    recordId: scheduleId,
-                    userName: User.Identity?.Name ?? "System",
-                    details: $"Updated task {scheduleId} with changes: {string.Join(", ", changes)}"
-                );
+                // Description comparison
+                if (originalTask.ScheduleTaskDescription != task.ScheduleTaskDescription)
+                {
+                    changes.Add($"Description changed from '{originalTask.ScheduleTaskDescription ?? "(empty)"}' to '{task.ScheduleTaskDescription ?? "(empty)"}'");
+                }
+
+                // Date comparison
+                if (originalTask.ScheduleDate != task.ScheduleDate)
+                {
+                    changes.Add($"Date changed from '{originalTask.ScheduleDate.ToString("g")}' to '{task.ScheduleDate.ToString("g")}'");
+                }
+
+                // Status comparison
+                if (originalTask.ScheduleStatus != task.ScheduleStatus)
+                {
+                    changes.Add($"Status changed from '{originalTask.ScheduleStatus}' to '{task.ScheduleStatus}'");
+                }
+
+                // Log changes
+                if (changes.Count > 0)
+                {
+                    await Logger.LogAction(
+                        action: "UPDATE",
+                        tableName: "Tasks",
+                        recordId: scheduleId,
+                        userName: User.Identity?.Name ?? "System",
+                        details: $"Updated task {scheduleId}: {string.Join(", ", changes)}"
+                    );
+                }
+                else
+                {
+                    await Logger.LogAction(
+                        action: "UPDATE_NO_CHANGES",
+                        tableName: "Tasks",
+                        recordId: scheduleId,
+                        userName: User.Identity?.Name ?? "System",
+                        details: $"No changes detected for task {scheduleId}"
+                    );
+                }
 
                 return Ok("Task updated successfully");
             }
         }
         catch (Exception ex)
         {
-            // Log error with technical details
             await Logger.LogAction(
                 action: "UPDATE_ERROR",
                 tableName: "Tasks",
                 recordId: scheduleId,
                 userName: User.Identity?.Name ?? "System",
-                details: $"Error updating task: {ex.Message} | StackTrace: {ex.StackTrace}"
+                details: $"Error: {ex.Message} | Stack: {ex.StackTrace?.Substring(0, 200)}"
             );
 
-            return StatusCode(500, $"An error occurred: {ex.Message}");
+            return StatusCode(500, new
+            {
+                Error = "Update failed",
+                Message = ex.Message,
+                Reference = $"Error-{Guid.NewGuid()}"
+            });
         }
     }
 
@@ -251,29 +343,43 @@ public class TaskController : ControllerBase
     [HttpGet("GetTasks")]
     public async Task<IActionResult> GetTasks()
     {
-        using var con = new MySqlConnection(_connectionString);
-        await con.OpenAsync();
-
-        string query = "SELECT sched_Id, sched_taskTitle, sched_taskDescription, sched_date, sched_status FROM Tasks";
-        using var cmd = new MySqlCommand(query, con);
-
-        using var reader = await cmd.ExecuteReaderAsync();
-
-        var categories = new List<Tasksdto>();
-        while (await reader.ReadAsync())
+        try
         {
-            categories.Add(new Tasksdto
-            {
-                ScheduleId = Convert.ToInt32(reader["sched_Id"]), // Make sure user_Id is included
-                ScheduleTaskTitle = reader["sched_taskTitle"]?.ToString(),
-                ScheduleTaskDescription = reader["sched_taskDescription"]?.ToString(),
-                ScheduleDate = reader["sched_date"] == DBNull.Value ? default : Convert.ToDateTime(reader["sched_date"]),
-                ScheduleStatus = reader["sched_status"]?.ToString()
-            });
-        }
+            using var con = new MySqlConnection(_connectionString);
+            await con.OpenAsync();
 
-        return Ok(categories);
+            string query = @"
+        SELECT 
+            sched_Id, 
+            sched_taskTitle,
+            sched_user,
+            sched_taskDescription, 
+            sched_date, 
+            sched_inputted, 
+            sched_status 
+        FROM Tasks";
+
+            var tasks = await con.QueryAsync<Tasksdto>(@"
+        SELECT 
+            sched_Id AS ScheduleId, 
+            sched_taskTitle AS ScheduleTaskTitle,
+            sched_user AS ScheduleUser,
+            sched_taskDescription AS ScheduleTaskDescription, 
+            sched_date AS ScheduleDate, 
+            sched_inputted AS ScheduleInputted, 
+            sched_status AS ScheduleStatus 
+        FROM Tasks");
+
+            return Ok(tasks);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error retrieving tasks: {ex.Message}");
+            return StatusCode(500, $"An error occurred while retrieving tasks: {ex.Message}");
+        }
     }
+
+
 
     [HttpGet("CountTasks")]
     public async Task<IActionResult> CountTasks()

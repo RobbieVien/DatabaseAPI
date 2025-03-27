@@ -1386,7 +1386,7 @@ public class DatabaseController : ControllerBase
                 ScheduleTaskTitle = reader["sched_taskTitle"]?.ToString(),
                 ScheduleTaskDescription = reader["sched_taskDescription"]?.ToString(),
                 ScheduleDate = reader["sched_date"] == DBNull.Value ? default : Convert.ToDateTime(reader["sched_date"]),
-                ScheduleStatus = reader["sched_status"]?.ToString()
+                ScheduleStatus = ((byte[])reader["sched_status"])[0] == 1
             });
         }
 
