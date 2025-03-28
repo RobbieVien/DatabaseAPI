@@ -1208,9 +1208,6 @@ public class DatabaseController : ControllerBase
     [HttpPut("UpdateCourtHearing/{id}")]
     public async Task<IActionResult> UpdateCourtHearing(int id, [FromBody] Hearingdto hearing, [FromHeader(Name = "UserName")] string userName = "System")
     {
-        Console.WriteLine($"Incoming ID from URL: {id}");
-        Console.WriteLine($"Incoming Hearing ID: {hearing?.HearingId}");
-
         if (hearing == null)
         {
             return BadRequest("Invalid hearing data.");
@@ -1223,7 +1220,6 @@ public class DatabaseController : ControllerBase
 
         if (id != hearing.HearingId)
         {
-            Console.WriteLine("ID mismatch detected.");
             return BadRequest("ID mismatch.");
         }
 
@@ -1245,7 +1241,7 @@ public class DatabaseController : ControllerBase
             // Extract old values
             string oldCaseTitle = existingHearing?.hearing_Case_Title ?? "";
             string oldCaseNumber = existingHearing?.hearing_Case_Num ?? "";
-            string oldCaseStatus = existingHearing?.hearing_case_status ?? "";
+            bool oldCaseStatus = existingHearing?.hearing_case_status == 1; // ✅ Convert BIT to bool
 
             // Compare old and new values to track changes
             List<string> changes = new List<string>();
@@ -1258,23 +1254,23 @@ public class DatabaseController : ControllerBase
             {
                 changes.Add($"Case Number: \"{oldCaseNumber}\" → \"{hearing.HearingCaseNumber}\"");
             }
-            if (!string.Equals(oldCaseStatus, hearing.HearingCaseStatus ?? "", StringComparison.Ordinal))
+            if (oldCaseStatus != hearing.HearingCaseStatus)
             {
-                changes.Add($"Case Status: \"{oldCaseStatus}\" → \"{hearing.HearingCaseStatus}\"");
+                changes.Add($"Case Status: \"{(oldCaseStatus ? "Active" : "Inactive")}\" → \"{(hearing.HearingCaseStatus ? "Active" : "Inactive")}\"");
             }
 
             // Perform update
             string query = @"UPDATE Hearing 
-                   SET hearing_Case_Title = @CaseTitle, 
-                       hearing_Case_Num = @CaseNumber, 
-                       hearing_case_status = @CaseStatus 
-                   WHERE hearing_Id = @HearingId";
+                         SET hearing_Case_Title = @CaseTitle, 
+                             hearing_Case_Num = @CaseNumber, 
+                             hearing_case_status = @CaseStatus 
+                         WHERE hearing_Id = @HearingId";
 
             var result = await connection.ExecuteAsync(query, new
             {
                 CaseTitle = hearing.HearingCaseTitle ?? oldCaseTitle,
                 CaseNumber = hearing.HearingCaseNumber ?? oldCaseNumber,
-                CaseStatus = hearing.HearingCaseStatus ?? oldCaseStatus,
+                CaseStatus = hearing.HearingCaseStatus ? 1 : 0, // ✅ Convert bool to BIT
                 HearingId = id
             });
 
@@ -1285,7 +1281,7 @@ public class DatabaseController : ControllerBase
                 {
                     string logMessage = $"Updated hearing record (ID: {id})";
                     string details = string.Join(", ", changes);
-                    await LogAction(logMessage, "HEARING", id, userName, details);
+                    await Logger.LogAction(logMessage, "HEARING", id, userName, details);
                 }
 
                 return Ok(new { Message = $"Hearing entry with ID {id} updated successfully." });
@@ -1299,6 +1295,7 @@ public class DatabaseController : ControllerBase
             return StatusCode(500, new { message = $"Error updating hearing: {ex.Message}" });
         }
     }
+
 
 
 
@@ -1415,7 +1412,7 @@ public class DatabaseController : ControllerBase
                 HearingCaseNumber = reader["hearing_Case_Num"]?.ToString(),
                 HearingCaseDate = reader["hearing_Case_Date"]?.ToString() ?? string.Empty,
                 HearingCaseTime = reader["hearing_Case_Time"]?.ToString() ?? string.Empty,
-                HearingCaseStatus = reader["hearing_case_status"]?.ToString()
+                HearingCaseStatus = Convert.ToBoolean(reader["hearing_case_status"])
             });
         }
 

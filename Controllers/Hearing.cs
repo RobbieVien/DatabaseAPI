@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Security.Claims;
 using DatabaseAPI.Models;
 using DatabaseAPI.Utilities;
+using System.Configuration;
 
 [Route("api/[controller]")]
 [ApiController]
@@ -20,38 +21,63 @@ public class HearingController : ControllerBase
         _connectionString = configuration.GetConnectionString("DefaultConnection") ?? string.Empty;
     }
 
+    private readonly IConfiguration _configuration;
+
     [HttpPost("AddHearing")]
-    public async Task<IActionResult> AddHearing([FromBody] Hearingdto hearing)
+    public async Task<ActionResult<string>> AddHearing([FromBody] Hearingdto hearing)
     {
+        // Validate input
         if (hearing == null || string.IsNullOrWhiteSpace(hearing.HearingCaseTitle) ||
             string.IsNullOrWhiteSpace(hearing.HearingCaseNumber))
         {
             return BadRequest("Invalid Hearing data.");
         }
 
-        hearing.HearingCaseDate = DateTime.Now.ToString("yyyy-MM-dd");
-        hearing.HearingCaseTime = DateTime.Now.ToString("HH:mm:ss");
+        // Get Philippine time zone
+        TimeZoneInfo philippineTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila");
+        DateTime philippineNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, philippineTimeZone);
 
-        using var con = new MySqlConnection(_connectionString);
-        await con.OpenAsync();
+        // Parse date and time
+        if (!DateTime.TryParse(hearing.HearingCaseDate, out DateTime hearingDate) ||
+            !TimeSpan.TryParse(hearing.HearingCaseTime, out TimeSpan hearingTime))
+        {
+            return BadRequest("Invalid date or time format.");
+        }
+
+        // Combine hearing date and time
+        DateTime hearingDateTime = hearingDate.Date.Add(hearingTime);
+
+        // Check if hearing is in the past with a buffer of 1 minute to account for processing time
+        if (hearingDateTime < philippineNow.AddMinutes(1))
+        {
+            return BadRequest("Cannot add a hearing with a past or immediate date and time. Please choose a future time.");
+        }
+
+        string insertQuery = @"
+            INSERT INTO Hearing 
+            (hearing_Case_Title, hearing_Case_Num, hearing_Case_Date, hearing_Case_Time, 
+             hearing_Case_Inputted, hearing_case_status)
+            VALUES 
+            (@CaseTitle, @CaseNumber, @CaseDate, @CaseTime, 
+             CONVERT_TZ(NOW(), '+00:00', '+08:00'), @CaseStatus)";
+
+        var parameters = new DynamicParameters();
+        parameters.Add("@CaseTitle", hearing.HearingCaseTitle.Trim());
+        parameters.Add("@CaseNumber", hearing.HearingCaseNumber.Trim());
+        parameters.Add("@CaseDate", hearingDate);
+        parameters.Add("@CaseTime", hearingTime);
+        parameters.Add("@CaseStatus", hearing.HearingCaseStatus ? 1 : 0);
 
         try
         {
-            string insertQuery = @"INSERT INTO Hearing (hearing_Case_Title, hearing_Case_Num, hearing_Case_Date, hearing_Case_Time, hearing_case_status)
-                           VALUES (@CaseTitle, @CaseNumber, @CaseDate, @CaseTime, @CaseStatus)";
-
-            using var insertCmd = new MySqlCommand(insertQuery, con);
-            insertCmd.Parameters.AddWithValue("@CaseTitle", hearing.HearingCaseTitle.Trim());
-            insertCmd.Parameters.AddWithValue("@CaseNumber", hearing.HearingCaseNumber.Trim());
-            insertCmd.Parameters.AddWithValue("@CaseDate", hearing.HearingCaseDate);
-            insertCmd.Parameters.AddWithValue("@CaseTime", hearing.HearingCaseTime);
-            insertCmd.Parameters.AddWithValue("@CaseStatus", hearing.HearingCaseStatus);
-
-            await insertCmd.ExecuteNonQueryAsync();
+            using (var connection = new MySqlConnection(_connectionString))
+            {
+                await connection.OpenAsync();
+                await connection.ExecuteAsync(insertQuery, parameters);
+            }
 
             // Log the action
             await Logger.LogAction($"Hearing {hearing.HearingCaseTitle} has been added.", "Hearing", 0);
-
             return Ok("Hearing added successfully.");
         }
         catch (Exception ex)
@@ -61,12 +87,11 @@ public class HearingController : ControllerBase
         }
     }
 
+
+
     [HttpPut("UpdateCourtHearing/{id}")]
     public async Task<IActionResult> UpdateCourtHearing(int id, [FromBody] Hearingdto hearing, [FromHeader(Name = "UserName")] string userName = "System")
     {
-        Console.WriteLine($"Incoming ID from URL: {id}");
-        Console.WriteLine($"Incoming Hearing ID: {hearing?.HearingId}");
-
         if (hearing == null)
         {
             return BadRequest("Invalid hearing data.");
@@ -79,8 +104,27 @@ public class HearingController : ControllerBase
 
         if (id != hearing.HearingId)
         {
-            Console.WriteLine("ID mismatch detected.");
             return BadRequest("ID mismatch.");
+        }
+
+        // Time zone conversion for Philippine time
+        TimeZoneInfo philippineTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila");
+        DateTime philippineNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, philippineTimeZone);
+
+        // Validate date and time
+        if (!DateTime.TryParse(hearing.HearingCaseDate, out DateTime hearingDate) ||
+            !TimeSpan.TryParse(hearing.HearingCaseTime, out TimeSpan hearingTime))
+        {
+            return BadRequest("Invalid date or time format.");
+        }
+
+        // Combine hearing date and time
+        DateTime hearingDateTime = hearingDate.Date.Add(hearingTime);
+
+        // Check if hearing is in the past
+        if (hearingDateTime < philippineNow)
+        {
+            return BadRequest("Cannot update a hearing with a past date and time.");
         }
 
         using var connection = new MySqlConnection(_connectionString);
@@ -90,7 +134,8 @@ public class HearingController : ControllerBase
         {
             // Fetch old values from DB
             var existingHearing = await connection.QueryFirstOrDefaultAsync<dynamic>(
-                "SELECT hearing_Case_Title, hearing_Case_Num, hearing_case_status FROM Hearing WHERE hearing_Id = @HearingId",
+                @"SELECT hearing_Case_Title, hearing_Case_Num, hearing_Case_Date, hearing_Case_Time, hearing_case_status 
+            FROM Hearing WHERE hearing_Id = @HearingId",
                 new { HearingId = id });
 
             if (existingHearing == null)
@@ -101,7 +146,12 @@ public class HearingController : ControllerBase
             // Extract old values
             string oldCaseTitle = existingHearing?.hearing_Case_Title ?? "";
             string oldCaseNumber = existingHearing?.hearing_Case_Num ?? "";
-            string oldCaseStatus = existingHearing?.hearing_case_status ?? "";
+            string oldCaseDate = existingHearing?.hearing_Case_Date != null ? Convert.ToDateTime(existingHearing.hearing_Case_Date).ToString("yyyy-MM-dd") : "";
+            string oldCaseTime = existingHearing?.hearing_Case_Time != null
+                ? ((TimeSpan)existingHearing.hearing_Case_Time).ToString(@"hh\:mm\:ss")
+                : "";
+
+            bool oldCaseStatus = existingHearing?.hearing_case_status == 1;
 
             // Compare old and new values to track changes
             List<string> changes = new List<string>();
@@ -114,15 +164,25 @@ public class HearingController : ControllerBase
             {
                 changes.Add($"Case Number: \"{oldCaseNumber}\" → \"{hearing.HearingCaseNumber}\"");
             }
-            if (!string.Equals(oldCaseStatus, hearing.HearingCaseStatus ?? "", StringComparison.Ordinal))
+            if (!string.Equals(oldCaseDate, hearing.HearingCaseDate ?? "", StringComparison.Ordinal))
             {
-                changes.Add($"Case Status: \"{oldCaseStatus}\" → \"{hearing.HearingCaseStatus}\"");
+                changes.Add($"Case Date: \"{oldCaseDate}\" → \"{hearing.HearingCaseDate}\"");
+            }
+            if (!string.Equals(oldCaseTime, hearing.HearingCaseTime ?? "", StringComparison.Ordinal))
+            {
+                changes.Add($"Case Time: \"{oldCaseTime}\" → \"{hearing.HearingCaseTime}\"");
+            }
+            if (oldCaseStatus != hearing.HearingCaseStatus)
+            {
+                changes.Add($"Case Status: \"{(oldCaseStatus ? "Active" : "Finished")}\" → \"{(hearing.HearingCaseStatus ? "Active" : "Finished")}\"");
             }
 
             // Perform update
             string query = @"UPDATE Hearing 
                    SET hearing_Case_Title = @CaseTitle, 
                        hearing_Case_Num = @CaseNumber, 
+                       hearing_Case_Date = @CaseDate,
+                       hearing_Case_Time = @CaseTime,
                        hearing_case_status = @CaseStatus 
                    WHERE hearing_Id = @HearingId";
 
@@ -130,7 +190,9 @@ public class HearingController : ControllerBase
             {
                 CaseTitle = hearing.HearingCaseTitle ?? oldCaseTitle,
                 CaseNumber = hearing.HearingCaseNumber ?? oldCaseNumber,
-                CaseStatus = hearing.HearingCaseStatus ?? oldCaseStatus,
+                CaseDate = hearing.HearingCaseDate ?? oldCaseDate,
+                CaseTime = hearing.HearingCaseTime ?? oldCaseTime,
+                CaseStatus = hearing.HearingCaseStatus ? 1 : 0,
                 HearingId = id
             });
 
@@ -155,6 +217,8 @@ public class HearingController : ControllerBase
             return StatusCode(500, new { message = $"Error updating hearing: {ex.Message}" });
         }
     }
+
+
 
     [HttpDelete("DeleteHearing/{id}")]
     public async Task<IActionResult> DeleteHearing(int id, [FromHeader(Name = "UserName")] string userName = "System")
@@ -235,9 +299,16 @@ public class HearingController : ControllerBase
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
 
-        string query = "SELECT hearing_Id, hearing_Case_Title, hearing_Case_Num, hearing_Case_Date, hearing_Case_Time, hearing_case_status FROM Hearing";
-        using var cmd = new MySqlCommand(query, con);
+        string query = @"SELECT hearing_Id, 
+                            hearing_Case_Title, 
+                            hearing_Case_Num, 
+                            DATE_FORMAT(hearing_Case_Date, '%Y-%m-%d') AS hearing_Case_Date, 
+                            TIME_FORMAT(hearing_Case_Time, '%H:%i:%s') AS hearing_Case_Time, 
+                            DATE_FORMAT(hearing_Case_Inputted, '%Y-%m-%d %H:%i:%s') AS hearing_Case_Inputted, 
+                            hearing_case_status 
+                     FROM Hearing";
 
+        using var cmd = new MySqlCommand(query, con);
         using var reader = await cmd.ExecuteReaderAsync();
 
         var hearings = new List<Hearingdto>();
@@ -250,12 +321,20 @@ public class HearingController : ControllerBase
                 HearingCaseNumber = reader["hearing_Case_Num"]?.ToString(),
                 HearingCaseDate = reader["hearing_Case_Date"]?.ToString() ?? string.Empty,
                 HearingCaseTime = reader["hearing_Case_Time"]?.ToString() ?? string.Empty,
-                HearingCaseStatus = reader["hearing_case_status"]?.ToString()
+                HearingCaseInputted = reader["hearing_Case_Inputted"]?.ToString() ?? string.Empty,
+                HearingCaseStatus = Convert.ToBoolean(reader["hearing_case_status"]) // Convert BIT to bool
             });
         }
 
         return Ok(hearings);
     }
+
+
+
+
+
+
+
 
     [HttpGet("CountHearings")]
     public async Task<IActionResult> CountHearings()
