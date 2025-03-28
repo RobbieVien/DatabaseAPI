@@ -217,4 +217,19 @@ public class CategoryController : ControllerBase
 
         return Ok(categories);
     }
+
+    [HttpGet("search")]
+    public async Task<IActionResult> SearchCategories([FromQuery] string query)
+    {
+        using var connection = new MySqlConnection(_connectionString);
+        string sql = @"SELECT * FROM Category 
+                   WHERE cat_legalcase LIKE @Query
+                      OR cat_republicAct LIKE @Query
+                      OR cat_natureCase LIKE @Query";
+
+        var categories = await connection.QueryAsync<Categorydto>(sql, new { Query = $"%{query}%" });
+
+        return Ok(categories);
+    }
+
 }
