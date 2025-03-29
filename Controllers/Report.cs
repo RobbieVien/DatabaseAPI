@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Security.Claims;
 using DatabaseAPI.Models;
 using DatabaseAPI.Utilities;
+using ClosedXML.Excel;
 
 [Route("api/[controller]")]
 [ApiController]
@@ -166,4 +167,82 @@ public class ReportController : ControllerBase
             return StatusCode(500, $"An error occurred: {ex.Message}");
         }
     }
+
+    [HttpGet("export-reports")]
+    public async Task<IActionResult> ExportReports()
+    {
+        try
+        {
+            string query = @"
+        SELECT 
+            Report_Id AS Report_Id,
+            Report_NatureCase AS Report_NatureCase,
+            CaseCount
+        FROM Report
+        ORDER BY Report_Id DESC";
+
+            using var connection = new MySqlConnection(_connectionString);
+            var reportData = (await connection.QueryAsync<ReportDto>(query)).ToList();
+
+            Console.WriteLine($"Retrieved {reportData.Count} report records.");
+
+            if (!reportData.Any())
+            {
+                return NotFound("No report records found.");
+            }
+
+            using var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("Report Data");
+
+            // Header formatting
+            worksheet.Cell("A1").Value = "REPORT DATA EXPORT";
+            worksheet.Range("A1:B1").Merge().Style.Font.SetBold(true).Font.SetFontSize(14).Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+
+            // Properly formatted date exported
+            worksheet.Cell("A2").Value = $"Date Exported: {DateTime.Now:MMMM dd, yyyy hh:mm tt}";
+            worksheet.Range("A2:B2").Merge().Style.Font.SetItalic(true).Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+
+            // Column headers
+            var headers = new[] { "Nature of Case", "Case Count" };
+            for (int i = 0; i < headers.Length; i++)
+            {
+                worksheet.Cell(4, i + 1).Value = headers[i];
+                worksheet.Cell(4, i + 1).Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.LightGray).Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+            }
+
+            // Data population (excluding hidden columns)
+            int row = 5;
+            foreach (var record in reportData)
+            {
+                worksheet.Cell(row, 1).Value = record.Report_NatureCase ?? "N/A";
+                worksheet.Cell(row, 2).Value = record.CaseCount;
+                row++;
+            }
+
+            // Column adjustments
+            worksheet.Columns().AdjustToContents();
+            for (int i = 1; i <= headers.Length; i++)
+            {
+                if (worksheet.Column(i).Width < 15)
+                    worksheet.Column(i).Width = 15;
+            }
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            stream.Position = 0;
+
+            return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"Report_Data_{DateTime.Now:yyyyMMdd}.xlsx");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error exporting report data: {ex.Message}");
+            return StatusCode(500, $"Error exporting report data: {ex.Message}");
+        }
+    }
+
+
+
+
+
+
 }

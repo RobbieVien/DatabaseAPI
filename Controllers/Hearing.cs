@@ -9,6 +9,8 @@ using System.Security.Claims;
 using DatabaseAPI.Models;
 using DatabaseAPI.Utilities;
 using System.Configuration;
+using System.Drawing;
+using ClosedXML.Excel;
 
 [Route("api/[controller]")]
 [ApiController]
@@ -452,5 +454,113 @@ public class HearingController : ControllerBase
         }
     }
 
+    [HttpGet("export-hearing")]
+    public async Task<IActionResult> ExportHearingReport()
+    {
+        try
+        {
+            string query = @" 
+                                     SELECT 
+                hearing_Id AS HearingId, 
+                hearing_Case_Title AS HearingCaseTitle, 
+                hearing_Case_Num AS HearingCaseNumber, 
+                DATE_FORMAT(hearing_Case_Date, '%Y-%m-%d') AS HearingCaseDate, 
+                TIME_FORMAT(hearing_Case_Time, '%H:%i:%s') AS HearingCaseTime, 
+                DATE_FORMAT(hearing_Case_Inputted, '%Y-%m-%d %H:%i:%s') AS HearingCaseInputted, 
+                hearing_case_status AS HearingCaseStatus,
+                CASE 
+                    WHEN CONCAT(hearing_Case_Date, ' ', hearing_Case_Time) >= CONVERT_TZ(NOW(), 'UTC', 'Asia/Manila') THEN 0
+                    ELSE 1
+                END AS is_past
+            FROM Hearing
+            ORDER BY is_past ASC, 
+                     CASE WHEN is_past = 0 THEN hearing_Case_Date END ASC, 
+                     CASE WHEN is_past = 0 THEN hearing_Case_Time END ASC,
+                     CASE WHEN is_past = 1 THEN hearing_Case_Date END DESC, 
+                     CASE WHEN is_past = 1 THEN hearing_Case_Time END DESC";
+
+
+            using var connection = new MySqlConnection(_connectionString);
+
+            // After your database connection but before mapping to DTO
+            var rawData = await connection.QueryAsync(query);
+            Console.WriteLine("Raw database results:");
+            foreach (var item in rawData)
+            {
+                // Cast to IDictionary to safely access the properties
+                var rowDict = item as IDictionary<string, object>;
+                if (rowDict != null)
+                {
+                    Console.WriteLine("Row data:");
+                    foreach (var kvp in rowDict)
+                    {
+                        Console.WriteLine($"  {kvp.Key}: {kvp.Value ?? "null"}");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Could not convert row to dictionary");
+                }
+            }
+            var hearingData = (await connection.QueryAsync<Hearingdto>(query)).ToList();
+
+            Console.WriteLine($"Retrieved {hearingData.Count} hearing records.");
+
+            if (!hearingData.Any())
+            {
+                return NotFound("No hearing records found.");
+            }
+
+            foreach (var record in hearingData)
+            {
+                Console.WriteLine($"Case Title: {record.HearingCaseTitle}, Case Number: {record.HearingCaseNumber}, " +
+                                  $"Date: {record.HearingCaseDate}, Time: {record.HearingCaseTime}, " +
+                                  $"Status: {record.HearingCaseStatus}, Inputted: {record.HearingCaseInputted}");
+            }
+
+            using var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("Hearing Schedule");
+            worksheet.Cell("A1").Value = "HEARING SCHEDULE REPORT";
+            worksheet.Range("A1:F1").Merge().Style.Font.SetBold(true).Font.SetFontSize(14).Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+            worksheet.Cell("A2").Value = $"Date Exported: {DateTime.Now:MM/dd/yyyy hh:mm tt}";
+            worksheet.Range("A2:F2").Merge().Style.Font.SetItalic(true).Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+
+            var headers = new[] { "Case Title", "Case Number", "Hearing Date", "Hearing Time", "Status", "Date Inputted" };
+            for (int i = 0; i < headers.Length; i++)
+            {
+                worksheet.Cell(4, i + 1).Value = headers[i];
+                worksheet.Cell(4, i + 1).Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.LightGray).Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+            }
+
+            int row = 5;
+            foreach (var record in hearingData)
+            {
+                worksheet.Cell(row, 1).Value = record.HearingCaseTitle ?? "N/A";
+                worksheet.Cell(row, 2).Value = record.HearingCaseNumber ?? "N/A";
+                worksheet.Cell(row, 3).Value = !string.IsNullOrEmpty(record.HearingCaseDate) ? record.HearingCaseDate : "N/A";
+                worksheet.Cell(row, 4).Value = !string.IsNullOrEmpty(record.HearingCaseTime) ? record.HearingCaseTime : "N/A";
+                worksheet.Cell(row, 5).Value = record.HearingCaseStatus ? "Completed" : "Pending";
+                worksheet.Cell(row, 6).Value = !string.IsNullOrEmpty(record.HearingCaseInputted) ? record.HearingCaseInputted : "N/A";
+                row++;
+            }
+
+            worksheet.Columns().AdjustToContents();
+            for (int i = 1; i <= headers.Length; i++)
+            {
+                if (worksheet.Column(i).Width < 15)
+                    worksheet.Column(i).Width = 15;
+            }
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            stream.Position = 0;
+            return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"Hearing_Report_{DateTime.Now:yyyyMMdd}.xlsx");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error exporting hearing data: {ex.Message}");
+            return StatusCode(500, $"Error exporting hearing data: {ex.Message}");
+        }
+    }
 
 }
