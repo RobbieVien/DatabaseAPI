@@ -321,4 +321,113 @@ public class UserController : ControllerBase
 
         return Ok(users);
     }
+
+
+    //DI ko PA NAtetest to kailagan nakalogin si user e
+    [HttpPut("update-profile")]
+    public async Task<IActionResult> UpdateProfile([FromBody] UserDto updatedUser)
+    {
+        // Get current user ID from JWT token
+        var userIdClaim = User.FindFirst("UserId")?.Value;
+        if (userIdClaim == null)
+            return Unauthorized("User not authenticated.");
+
+        int loggedInUserId = int.Parse(userIdClaim);
+
+        // Validate user ownership
+        if (loggedInUserId != updatedUser.UserId)
+            return Forbid("You can only update your own profile.");
+
+        // Input validation
+        if (updatedUser == null)
+            return BadRequest("Invalid request data.");
+
+        if (string.IsNullOrWhiteSpace(updatedUser.UserName) ||
+            string.IsNullOrWhiteSpace(updatedUser.FirstName) ||
+            string.IsNullOrWhiteSpace(updatedUser.LastName))
+        {
+            return BadRequest("First name, last name, and username are required.");
+        }
+
+        // Password handling
+        string newPassword = null;
+        bool passwordChanged = false;
+        if (!string.IsNullOrWhiteSpace(updatedUser.Password))
+        {
+            // Add password validation (example: minimum length)
+            if (updatedUser.Password.Length < 8)
+                return BadRequest("Password must be at least 8 characters.");
+
+            newPassword = PasswordHasher.HashPassword(updatedUser.Password);
+            passwordChanged = true;
+        }
+
+        using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        // Get existing user details
+        string selectQuery = "SELECT user_Id, user_Fname, user_Lname, user_Role, user_Status, user_Name, user_Pass FROM ManageUsers WHERE user_Id = @Id";
+        var oldUser = await connection.QueryFirstOrDefaultAsync<dynamic>(selectQuery, new { Id = loggedInUserId });
+
+        if (oldUser == null)
+        {
+            return NotFound("Your profile was not found.");
+        }
+
+        // Track changes
+        List<string> changes = new List<string>();
+
+        // Check for changes (excluding role and status)
+        if (oldUser.user_Fname != updatedUser.FirstName)
+        {
+            changes.Add($"updated \"{oldUser.user_Fname}\" to \"{updatedUser.FirstName}\" in FirstName");
+        }
+
+        if (oldUser.user_Lname != updatedUser.LastName)
+        {
+            changes.Add($"updated \"{oldUser.user_Lname}\" to \"{updatedUser.LastName}\" in LastName");
+        }
+
+        if (oldUser.user_Name != updatedUser.UserName)
+        {
+            changes.Add($"updated \"{oldUser.user_Name}\" to \"{updatedUser.UserName}\" in UserName");
+        }
+
+        // Update password if changed
+        string finalPassword = passwordChanged ? newPassword : oldUser.user_Pass;
+
+        // Update user
+        string updateQuery = @"
+        UPDATE ManageUsers 
+        SET user_Fname = @FirstName,
+            user_Lname = @LastName,
+            user_Name = @UserName,
+            user_Pass = @Password
+        WHERE user_Id = @Id";
+
+        int rowsAffected = await connection.ExecuteAsync(updateQuery, new
+        {
+            FirstName = updatedUser.FirstName,
+            LastName = updatedUser.LastName,
+            UserName = updatedUser.UserName,
+            Password = finalPassword,
+            Id = loggedInUserId
+        });
+
+        if (rowsAffected > 0)
+        {
+            // Combine changes
+            string changeMessage = string.Join(", ", changes);
+            if (string.IsNullOrEmpty(changeMessage))
+                changeMessage = "No changes were made";
+
+            // Log action (uncomment if you have a logger)
+            // await Logger.LogAction("Edit", "ManageUsers", loggedInUserId, User.Identity.Name, changeMessage);
+
+            return Ok("Profile updated successfully.");
+        }
+
+        return BadRequest("Profile update failed.");
+    }
+
 }
