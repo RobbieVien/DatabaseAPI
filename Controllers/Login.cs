@@ -27,8 +27,9 @@ namespace DatabaseAPI.Controllers
             using var connection = new MySqlConnection(_connectionString);
             await connection.OpenAsync();
 
-            string sql = "SELECT user_Pass FROM ManageUsers WHERE user_Name = @UserName";
-            string storedHash = await connection.QueryFirstOrDefaultAsync<string>(sql, new { UserName = user.UserName });
+            // First check if the user exists and get their password hash
+            string passwordSql = "SELECT user_Pass FROM ManageUsers WHERE user_Name = @UserName";
+            string storedHash = await connection.QueryFirstOrDefaultAsync<string>(passwordSql, new { UserName = user.UserName });
 
             Console.WriteLine($"🔍 Entered Password: {user.Password}");
             Console.WriteLine($"🔍 Stored Hash: {storedHash}");
@@ -52,7 +53,13 @@ namespace DatabaseAPI.Controllers
                 return Unauthorized("Invalid username or password.");
             }
 
-            return Ok("Login successful.");
+            // Now fetch the user data to return
+            string userSql = "SELECT * FROM ManageUsers WHERE user_Name = @UserName";
+            var userData = await connection.QueryFirstOrDefaultAsync<UserDto>(userSql, new { UserName = user.UserName });
+
+            // Return user data as JSON
+            return Ok(userData);
         }
     }
 }
+
