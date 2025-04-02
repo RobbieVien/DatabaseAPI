@@ -293,7 +293,7 @@ public class UserController : ControllerBase
     //----------------------------------------------------------------------------------------------------------------
 
 
-    //for DataGridview
+    //for DataGridview pwede naman ata kuhanin ng front end to
     [HttpGet("GetUsers")]
     public async Task<IActionResult> GetUsers()
     {

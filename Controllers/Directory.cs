@@ -25,24 +25,21 @@ public class DirectoryController : ControllerBase
         {
             return BadRequest("Invalid user data.");
         }
-
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
-
         // Check if username already exists
         string checkQuery = "SELECT COUNT(*) FROM Directory WHERE direct_name = @DirectoryName";
         using var checkCmd = new MySqlCommand(checkQuery, con);
         checkCmd.Parameters.AddWithValue("@DirectoryName", directory.DirectoryName);
         int userCount = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
-
         if (userCount > 0)
         {
             return Conflict("That name already exists.");
         }
-
         // Insert new user
         string insertQuery = @"INSERT INTO Directory (direct_name, direct_position, direct_contact, direct_email, direct_status)
-                           VALUES (@DirectoryName, @DirectoryPosition, @DirectoryContact, @DirectoryEmail, @DirectoryStatus)";
+                        VALUES (@DirectoryName, @DirectoryPosition, @DirectoryContact, @DirectoryEmail, @DirectoryStatus);
+                        SELECT LAST_INSERT_ID();";
         using var insertCmd = new MySqlCommand(insertQuery, con);
         insertCmd.Parameters.AddWithValue("@DirectoryName", directory.DirectoryName);
         insertCmd.Parameters.AddWithValue("@DirectoryPosition", directory.DirectoryPosition);
@@ -50,12 +47,17 @@ public class DirectoryController : ControllerBase
         insertCmd.Parameters.AddWithValue("@DirectoryEmail", directory.DirectoryEmail);
         insertCmd.Parameters.AddWithValue("@DirectoryStatus", directory.DirectoryStatus);
 
-        await insertCmd.ExecuteNonQueryAsync();
+        // Execute and get the new ID
+        int newId = Convert.ToInt32(await insertCmd.ExecuteScalarAsync());
+
+        // Set the ID on the returned object
+        directory.DirectoryId = newId;
 
         // Log the action
-        await Logger.LogAction($"Directory {directory.DirectoryName} has been added.", "Directory", 0);
+        await Logger.LogAction($"Directory {directory.DirectoryName} has been added.", "Directory", newId);
 
-        return Ok("Directory added successfully.");
+        // Return the directory object instead of a string
+        return Ok(directory);
     }
 
     [HttpPut("DirectoryEdit/{id}")]
@@ -93,12 +95,12 @@ public class DirectoryController : ControllerBase
 
             // Update query
             string updateQuery = @"UPDATE Directory 
-                     SET direct_name = @DirectoryName,
-                         direct_position = @DirectoryPosition,
-                         direct_contact = @DirectoryContact,
-                         direct_email = @DirectoryEmail,
-                         direct_status = @DirectoryStatus
-                     WHERE directory_Id = @Id";
+                 SET direct_name = @DirectoryName,
+                     direct_position = @DirectoryPosition,
+                     direct_contact = @DirectoryContact,
+                     direct_email = @DirectoryEmail,
+                     direct_status = @DirectoryStatus
+                 WHERE directory_Id = @Id";
 
             using var updateCmd = new MySqlCommand(updateQuery, con);
             updateCmd.Parameters.AddWithValue("@Id", id);
@@ -143,7 +145,9 @@ public class DirectoryController : ControllerBase
                     await Logger.LogAction(logMessage, "DIRECTORY", id, userName, details);
                 }
 
-                return Ok(new { Message = $"Directory entry with ID {id} updated successfully." });
+                // CHANGED: Set the ID on the directory object and return it
+                directory.DirectoryId = id; // ADDED: Make sure ID is set on returned object
+                return Ok(directory); // CHANGED from: return Ok(new { Message = $"Directory entry with ID {id} updated successfully." });
             }
             else
             {
@@ -254,7 +258,7 @@ public class DirectoryController : ControllerBase
             var directories = (await con.QueryAsync<DirectoryDto>(query)).ToList();
 
             if (directories.Count == 0)
-                return NotFound("No directory records found.");
+                return NotFound(new { Message = "No directory records found." });
 
             return Ok(directories);
         }

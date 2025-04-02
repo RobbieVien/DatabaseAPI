@@ -32,7 +32,7 @@ public class CategoryController : ControllerBase
         await con.OpenAsync();
 
         string insertQuery = @"INSERT INTO Category (cat_legalcase, cat_republicAct, cat_natureCase)
-                               VALUES (@LegalCase, @RepublicAct, @NatureCase)";
+                           VALUES (@LegalCase, @RepublicAct, @NatureCase)";
 
         int rowsAffected = await con.ExecuteAsync(insertQuery, new
         {
@@ -44,11 +44,18 @@ public class CategoryController : ControllerBase
         if (rowsAffected > 0)
         {
             int newCategoryId = await con.ExecuteScalarAsync<int>("SELECT LAST_INSERT_ID()");
-            await Logger.LogAction("Add", "Category", newCategoryId, "System");
-            return Ok("Category added successfully.");
+
+            string categoryDetails = $"Legal Case: {category.CategoryLegalCase}, Republic Act: {category.CategoryRepublicAct}, Nature Case: {category.CategoryNatureCase}";
+
+            await Logger.LogAction("Add", "Category", newCategoryId, "System", categoryDetails);
+
+            category.CategoryId = newCategoryId;
+            return Ok(category);
         }
+
         return BadRequest("Failed to add category.");
     }
+
 
 
     //CATEGORIES
@@ -127,8 +134,8 @@ public class CategoryController : ControllerBase
                 string details = string.Join(", ", changes);
                 await Logger.LogAction(logMessage, "Category", id, userName, details);
             }
-
-            return Ok("Category updated successfully.");
+            request.Category.CategoryId = id;
+            return Ok(request.Category);
         }
 
         return NotFound("No category found with the specified ID.");
