@@ -80,7 +80,8 @@ public class HearingController : ControllerBase
 
             // Log the action
             await Logger.LogAction($"Hearing {hearing.HearingCaseTitle} has been added.", "Hearing", 0);
-            return Ok("Hearing added successfully.");
+
+            return Ok(new { message = "Hearing added successfully." });
         }
         catch (Exception ex)
         {

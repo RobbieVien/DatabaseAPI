@@ -91,7 +91,7 @@ public class UserController : ControllerBase
             // Log the action
             await Logger.LogAction("Add", "ManageUsers", newUserId, currentUserName);
 
-            return Ok("User added successfully.");
+            return Ok(new { message = "User added successfully." }); ;
         }
 
         return BadRequest("Failed to add user.");

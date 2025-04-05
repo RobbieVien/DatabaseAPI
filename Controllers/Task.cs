@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using DatabaseAPI.Models;
 using DatabaseAPI.Utilities;
 using ClosedXML.Excel;
+using DocumentFormat.OpenXml.Office2010.Excel;
 
 [Route("api/[controller]")]
 [ApiController]
@@ -117,7 +118,7 @@ public class TaskController : ControllerBase
                     details: $"Task '{tasks.ScheduleTaskTitle}' added successfully."
                 );
 
-                return Ok("Task added successfully.");
+                return Ok(new { message = "User added successfully." });
             }
             catch (Exception ex)
             {
