@@ -291,7 +291,25 @@ public class UserController : ControllerBase
 
 
     //----------------------------------------------------------------------------------------------------------------
+    [HttpGet("CountUsers")]
+    public async Task<IActionResult> CountUsers()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
 
+        string query = "SELECT COUNT(*) FROM ManageUsers";
+        using var cmd = new MySqlCommand(query, con);
+
+        try
+        {
+            int userCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+            return Ok(userCount);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
 
     //for DataGridview pwede naman ata kuhanin ng front end to
     [HttpGet("GetUsers")]

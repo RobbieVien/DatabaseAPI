@@ -68,4 +68,33 @@ public class NotificationController : ControllerBase
             return StatusCode(500, $"An error occurred: {ex.Message}");
         }
     }
+
+    [HttpGet("NotificationCounts")]
+    public async Task<IActionResult> GetNotificationCount()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        string query = @"SELECT COUNT(*) FROM (
+                        SELECT sched_Id FROM Tasks
+                        WHERE CAST(sched_date AS DATE) = CAST(CURDATE() AS DATE)
+                        AND TRIM(sched_status) = 'Pending'
+                        UNION ALL
+                        SELECT hearing_Id FROM Hearing
+                        WHERE CAST(hearing_Case_Date AS DATE) = CAST(CURDATE() AS DATE)
+                        AND TRIM(hearing_case_status) = 'Pending'
+                    ) AS CombinedCount";
+
+        using var cmd = new MySqlCommand(query, con);
+
+        try
+        {
+            int notificationCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+            return Ok(notificationCount);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
 }
