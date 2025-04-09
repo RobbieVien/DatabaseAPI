@@ -110,11 +110,10 @@ public class TaskController : ControllerBase
                 }
 
                 // Log the action
-                await Logger.LogAction(
+                await Logger.LogAction(HttpContext,
                     action: "INSERT",
                     tableName: "Tasks",
                     recordId: 0,
-                    userName: "Admin",
                     details: $"Task '{tasks.ScheduleTaskTitle}' added successfully."
                 );
 
@@ -185,11 +184,10 @@ public class TaskController : ControllerBase
 
                 if (originalTask == null)
                 {
-                    await Logger.LogAction(
+                    await Logger.LogAction(HttpContext,
                         action: "UPDATE_ERROR",
                         tableName: "Tasks",
                         recordId: scheduleId,
-                        userName: userName,
                         details: $"Original task {scheduleId} not found during update"
                     );
                     return NotFound($"Task {scheduleId} not found");
@@ -242,11 +240,10 @@ public class TaskController : ControllerBase
                 // Log changes if any
                 if (changes.Count > 0)
                 {
-                    await Logger.LogAction(
+                    await Logger.LogAction(HttpContext,
                         action: "UPDATE",
                         tableName: "Tasks",
                         recordId: scheduleId,
-                        userName: userName,
                         details: $"Updated task record (ID: {scheduleId}). Changes: {string.Join(", ", changes)}"
                     );
                 }
@@ -257,11 +254,10 @@ public class TaskController : ControllerBase
         catch (Exception ex)
         {
             // Log the error
-            await Logger.LogAction(
+            await Logger.LogAction(HttpContext,
                 action: "UPDATE_ERROR",
                 tableName: "Tasks",
                 recordId: scheduleId,
-                userName: userName,
                 details: $"Error updating task: {ex.Message}"
             );
 
@@ -329,7 +325,7 @@ public class TaskController : ControllerBase
 
                 string logMessage = $"Deleted task record (ID: {id})";
                 string details = string.Join(", ", changes);
-                await Logger.LogAction(logMessage, "Tasks", id, userName, details);
+                await Logger.LogAction(HttpContext, logMessage, "Tasks", id, details);
 
                 return Ok(new { Message = $"Task with ID {id} deleted successfully." });
             }

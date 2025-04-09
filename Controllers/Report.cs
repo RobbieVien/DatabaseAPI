@@ -106,14 +106,13 @@ public class ReportController : ControllerBase
                     return NotFound($"No report found with ID {reportId}");
                 }
 
-                // Log the deletion
                 await Logger.LogAction(
-                    action: "DELETE",
-                    tableName: "Report",
-                    recordId: reportId,
-                    userName: User.Identity?.Name ?? "System", // Replace with actual user context
-                    details: $"Deleted report with ID {reportId}"
-                );
+                       HttpContext,
+                       action: "DELETE",
+                       tableName: "Report",
+                       recordId: reportId,
+                       details: $"Deleted report with ID {reportId}"
+                   );
 
                 return NoContent();
             }
@@ -122,10 +121,10 @@ public class ReportController : ControllerBase
         {
             // Log the error
             await Logger.LogAction(
+                HttpContext,
                 action: "DELETE_ERROR",
                 tableName: "Report",
                 recordId: reportId,
-                userName: User.Identity?.Name ?? "System",
                 details: $"Error deleting report: {ex.Message}"
             );
 
@@ -157,10 +156,10 @@ public class ReportController : ControllerBase
         {
             // Log the error
             await Logger.LogAction(
+                HttpContext,
                 action: "SELECT_ERROR",
                 tableName: "Report",
                 recordId: -1,
-                userName: User.Identity?.Name ?? "System",
                 details: $"Error retrieving reports: {ex.Message}"
             );
 

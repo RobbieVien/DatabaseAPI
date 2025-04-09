@@ -89,7 +89,7 @@ public class UserController : ControllerBase
             int newUserId = await con.ExecuteScalarAsync<int>("SELECT LAST_INSERT_ID()");
 
             // Log the action
-            await Logger.LogAction("Add", "ManageUsers", newUserId, currentUserName);
+            await Logger.LogAction(HttpContext, "Add", "ManageUsers", newUserId);
 
             return Ok(new { message = "User added successfully." }); ;
         }
@@ -218,7 +218,7 @@ public class UserController : ControllerBase
             }
 
             // Log the edit action with detailed changes
-            await Logger.LogAction("Edit", "ManageUsers", id, currentUserName, changeMessage);
+            await Logger.LogAction(HttpContext, "Edit", "ManageUsers", id, changeMessage);
             return Ok("User updated successfully.");
         }
 
@@ -275,7 +275,7 @@ public class UserController : ControllerBase
 
                 string logMessage = $"Deleted user record (ID: {id})";
                 string details = string.Join(", ", changes);
-                await Logger.LogAction(logMessage, "ManageUsers", id, userName, details);
+                await Logger.LogAction(HttpContext, logMessage, "ManageUsers", id, details);
 
                 return Ok(new { Message = $"User with ID {id} deleted successfully." });
             }

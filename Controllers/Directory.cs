@@ -54,7 +54,8 @@ public class DirectoryController : ControllerBase
         directory.DirectoryId = newId;
 
         // Log the action
-        await Logger.LogAction($"Directory {directory.DirectoryName} has been added.", "Directory", newId);
+        await Logger.LogAction(HttpContext, $"Directory {directory.DirectoryName} has been added.", "Directory", newId);
+
 
         // Return the directory object instead of a string
         return Ok(directory);
@@ -142,7 +143,7 @@ public class DirectoryController : ControllerBase
                 {
                     string logMessage = $"Updated directory entry (ID: {id})";
                     string details = string.Join(", ", changes);
-                    await Logger.LogAction(logMessage, "DIRECTORY", id, userName, details);
+                    await Logger.LogAction(HttpContext,logMessage, "DIRECTORY", id, details);
                 }
 
                 // CHANGED: Set the ID on the directory object and return it
@@ -217,7 +218,7 @@ public class DirectoryController : ControllerBase
                                  $"Email: \"{directory.DirectoryEmail}\", " +
                                  $"Status: \"{directory.DirectoryStatus}\"";
 
-                await Logger.LogAction("Deleted Directory", "Directory", id, userName, details);
+                await Logger.LogAction(HttpContext, "Deleted Directory", "Directory", id, details);
 
                 return Ok(new
                 {

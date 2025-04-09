@@ -14,10 +14,12 @@ namespace DatabaseAPI.Utilities
             _connectionString = configuration.GetConnectionString("DefaultConnection") ?? string.Empty;
         }
 
-        public static async Task<int> LogAction(string action, string tableName, int recordId, string userName = "Unknown", string details = "")
+        public static async Task<int> LogAction(HttpContext httpContext, string action, string tableName, int recordId, string details = "")
         {
             if (string.IsNullOrEmpty(_connectionString))
-                throw new System.Exception("Logger is not initialized with a connection string.");
+                throw new Exception("Logger is not initialized with a connection string.");
+
+            var userName = httpContext.Session.GetString("UserName") ?? "Unknown";
 
             using (var connection = new MySqlConnection(_connectionString))
             {
@@ -40,6 +42,31 @@ namespace DatabaseAPI.Utilities
                     await cleanupConnection.OpenAsync();
                     await cleanupConnection.ExecuteAsync("CALL CleanupOldLogs();");
                 }
+
+                return result;
+            }
+        }
+
+
+        public static async Task<int> LogLogin(string userName, string details = "")
+        {
+            if (string.IsNullOrEmpty(_connectionString))
+                throw new Exception("Logger is not initialized with a connection string.");
+
+            using (var connection = new MySqlConnection(_connectionString))
+            {
+                await connection.OpenAsync();
+                await connection.ExecuteAsync("SET time_zone = '+08:00';");
+
+                var sql = "INSERT INTO Logs (Action, TableName, RecordId, UserName, Details, Timestamp) VALUES (@Action, @TableName, @RecordId, @UserName, @Details, NOW())";
+                var result = await connection.ExecuteAsync(sql, new
+                {
+                    Action = "Login",
+                    TableName = "Users",
+                    RecordId = 0,  // No specific record ID for login actions
+                    UserName = userName,
+                    Details = details
+                });
 
                 return result;
             }

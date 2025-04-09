@@ -79,7 +79,7 @@ public class HearingController : ControllerBase
             }
 
             // Log the action
-            await Logger.LogAction($"Hearing {hearing.HearingCaseTitle} has been added.", "Hearing", 0);
+            await Logger.LogAction(HttpContext, $"Hearing {hearing.HearingCaseTitle} has been added.", "Hearing", 0);
 
             return Ok(new { message = "Hearing added successfully." });
         }
@@ -206,7 +206,7 @@ public class HearingController : ControllerBase
                 {
                     string logMessage = $"Updated hearing record (ID: {id})";
                     string details = string.Join(", ", changes);
-                    await Logger.LogAction(logMessage, "HEARING", id, userName, details);
+                    await Logger.LogAction(HttpContext, logMessage, "HEARING", id, details);
                 }
 
                 return Ok(new { Message = $"Hearing entry with ID {id} updated successfully." });
@@ -279,7 +279,7 @@ public class HearingController : ControllerBase
 
                 string logMessage = $"Deleted hearing record (ID: {id})";
                 string details = string.Join(", ", changes);
-                await Logger.LogAction(logMessage, "HEARING", id, userName, details);
+                await Logger.LogAction(HttpContext, logMessage, "HEARING", id, details);
 
                 return Ok(new { Message = $"Hearing entry with ID {id} deleted successfully." });
             }

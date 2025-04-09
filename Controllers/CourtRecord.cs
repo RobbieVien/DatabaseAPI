@@ -84,7 +84,8 @@ public class CourtRecordController : ControllerBase
 
             if (newRecordId > 0)
             {
-                await Logger.LogAction($"Added {courtrecord.RecordCaseTitle} successfully.", "COURTRECORD", newRecordId, userName);
+              await Logger.LogAction(HttpContext, $"Added {courtrecord.RecordCaseTitle} successfully.", "COURTRECORD", newRecordId);
+
                 return Ok(new { Message = $"Added {courtrecord.RecordCaseTitle} successfully.", RecordId = newRecordId });
             }
             else
@@ -176,7 +177,7 @@ public class CourtRecordController : ControllerBase
             if (rowsAffected > 0)
             {
                 // Log changes in the Logs table
-                await Logger.LogAction("Updated Court Record", "COURTRECORD", id, editedBy, details);
+                await Logger.LogAction(HttpContext, "Updated Court Record", "COURTRECORD", id, details);
 
                 return Ok(new { Message = $"Court record with ID {id} updated successfully by {editedBy}.", Details = details });
             }
@@ -239,7 +240,7 @@ public class CourtRecordController : ControllerBase
                                  $"Nature Case: \"{courtRecord.RecordNatureCase}\", " +
                                  $"Status: \"{courtRecord.RecordCaseStatus}\"";
 
-                await Logger.LogAction("Deleted Court Record", "CourtRecord", id, userName, details);
+                await Logger.LogAction(HttpContext, "Deleted Court Record", "CourtRecord", id, details);
 
                 return Ok(new
                 {

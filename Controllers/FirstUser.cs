@@ -82,11 +82,7 @@ public class FirstUserController : ControllerBase
             int newUserId = await con.ExecuteScalarAsync<int>("SELECT LAST_INSERT_ID()");
 
             // Log with static message in details
-            await Logger.LogAction(
-                action: "Add",
-                tableName: "ManageUsers",
-                recordId: newUserId,
-                details: "User has been created");
+            await Logger.LogAction(HttpContext, "Add", "ManageUsers", newUserId, "User has been created");
 
             return Ok("User added successfully.");
         }

@@ -27,12 +27,9 @@ namespace DatabaseAPI.Controllers
             using var connection = new MySqlConnection(_connectionString);
             await connection.OpenAsync();
 
-            // First check if the user exists and get their password hash
+            // Step 1: Check if the user exists and get their password hash
             string passwordSql = "SELECT user_Pass FROM ManageUsers WHERE user_Name = @UserName";
             string storedHash = await connection.QueryFirstOrDefaultAsync<string>(passwordSql, new { UserName = user.UserName });
-
-            Console.WriteLine($"🔍 Entered Password: {user.Password}");
-            Console.WriteLine($"🔍 Stored Hash: {storedHash}");
 
             if (string.IsNullOrWhiteSpace(user.Password))
             {
@@ -44,22 +41,59 @@ namespace DatabaseAPI.Controllers
                 return Unauthorized("Invalid username or password.");
             }
 
-            // ✅ Verify password
+            // Step 2: Verify password
             bool isPasswordValid = PasswordHasher.VerifyPassword(user.Password, storedHash);
-            Console.WriteLine($"🔍 Password Match: {isPasswordValid}");
 
             if (!isPasswordValid)
             {
                 return Unauthorized("Invalid username or password.");
             }
 
-            // Now fetch the user data to return
+            // Step 3: Fetch the user data
             string userSql = "SELECT * FROM ManageUsers WHERE user_Name = @UserName";
             var userData = await connection.QueryFirstOrDefaultAsync<UserDto>(userSql, new { UserName = user.UserName });
 
-            // Return user data as JSON
+            if (userData == null)
+            {
+                return Unauthorized("User not found.");
+            }
+
+            // Step 4: Store user information in the session
+            HttpContext.Session.SetString("UserName", userData.UserName);
+            HttpContext.Session.SetString("UserRole", userData.Role);
+
+            // Log the login action
+            await Logger.LogLogin(userData.UserName, "User logged in successfully.");
+
+            // Step 5: Return user data as JSON
             return Ok(userData);
         }
+
+
+
+        //Logout to
+        [HttpPost("logout")]
+        public IActionResult Logout()
+        {
+            HttpContext.Session.Clear(); // Clear all session data
+
+            return Ok(new { message = "Logout successful" });
+        }
+
+        [HttpGet("GetCurrentUser")]
+        public IActionResult GetCurrentUser()
+        {
+            var userName = HttpContext.Session.GetString("UserName");
+            var userRole = HttpContext.Session.GetString("UserRole");
+
+            if (string.IsNullOrEmpty(userName))
+            {
+                return Unauthorized(new { message = "User not logged in" });
+            }
+
+            return Ok(new { UserName = userName, UserRole = userRole });
+        }
+
     }
 }
 

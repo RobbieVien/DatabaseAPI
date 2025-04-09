@@ -47,7 +47,7 @@ public class CategoryController : ControllerBase
 
             string categoryDetails = $"Legal Case: {category.CategoryLegalCase}, Republic Act: {category.CategoryRepublicAct}, Nature Case: {category.CategoryNatureCase}";
 
-            await Logger.LogAction("Add", "Category", newCategoryId, "System", categoryDetails);
+            await Logger.LogAction(HttpContext, "Add", "Category", newCategoryId, categoryDetails);
 
             category.CategoryId = newCategoryId;
             return Ok(category);
@@ -132,7 +132,7 @@ public class CategoryController : ControllerBase
             {
                 string logMessage = $"Updated category (ID: {id})";
                 string details = string.Join(", ", changes);
-                await Logger.LogAction(logMessage, "Category", id, userName, details);
+                await Logger.LogAction(HttpContext, logMessage, "Category", id, details);
             }
             request.Category.CategoryId = id;
             return Ok(request.Category);
@@ -184,7 +184,7 @@ public class CategoryController : ControllerBase
                              $"Republic Act: \"{category.CategoryRepublicAct}\", " +
                              $"Nature Case: \"{category.CategoryNatureCase}\"";
 
-            await Logger.LogAction("Deleted category", "Category", id, userName, details);
+            await Logger.LogAction(HttpContext, "Deleted category", "Category", id, details);
 
             return Ok(new
             {
