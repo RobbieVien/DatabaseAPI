@@ -8,6 +8,7 @@
         public string ScheduleTaskDescription { get; set; } = string.Empty;
         public DateTime ScheduleDate { get; set; }
         public DateTime ScheduleInputted { get; set; }
-        public bool ScheduleStatus { get; set; }
+        public Boolean ScheduleStatus { get; set; }
+        public int ScheduleNotify { get; set; }
     }
 }

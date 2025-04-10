@@ -20,7 +20,7 @@ public class TaskController : ControllerBase
         _connectionString = configuration.GetConnectionString("DefaultConnection") ?? string.Empty;
     }
 
-    //Add Button
+    // Add Tasks
     [HttpPost("AddTasks")]
     public async Task<IActionResult> AddTasks([FromBody] Tasksdto tasks)
     {
@@ -35,20 +35,23 @@ public class TaskController : ControllerBase
             TimeZoneInfo.FindSystemTimeZoneById("Singapore Standard Time")
         );
 
-        // Since ScheduleDate is already a DateTime, we can directly use it
+        // Use the provided ScheduleDate and ScheduleInputted directly
         DateTime taskDate = tasks.ScheduleDate;
+        DateTime taskInputted = tasks.ScheduleInputted;
 
         // Check if task date is in the past (with a small buffer)
         if (taskDate.Date < philippineTime.Date)
         {
             return BadRequest("Cannot add a task with a past date. Please choose a future date.");
         }
-        // Continue with your code using taskDate
 
-        // Check if task date is in the past (with a small buffer)
-        if (taskDate.Date < philippineTime.Date)
+        // Calculate the difference in days between sched_date and sched_inputted
+        int daysDifference = (taskDate - taskInputted).Days;
+
+        // Validate that sched_notify is not greater than the difference in days
+        if (tasks.ScheduleNotify > daysDifference)
         {
-            return BadRequest("Cannot add a task with a past date. Please choose a future date.");
+            return BadRequest($"Notification cannot be set to {tasks.ScheduleNotify} days. The maximum valid notification time is {daysDifference} days.");
         }
 
         using (var con = new MySqlConnection(_connectionString))
@@ -58,8 +61,8 @@ public class TaskController : ControllerBase
             {
                 // Check for existing task
                 string checkQuery = @"SELECT COUNT(*) FROM Tasks 
-                               WHERE sched_taskTitle = @TaskTitle 
-                               AND DATE(sched_date) = DATE(@Date)";
+                        WHERE sched_taskTitle = @TaskTitle 
+                        AND DATE(sched_date) = DATE(@Date)";
                 var existingCount = await con.ExecuteScalarAsync<int>(
                     checkQuery,
                     new
@@ -81,15 +84,20 @@ public class TaskController : ControllerBase
                 sched_taskDescription, 
                 sched_date, 
                 sched_inputted, 
-                sched_status
+                sched_status,
+                sched_notify
             ) VALUES (
                 @TaskTitle,
                 @TaskUser,
                 @TaskDescription, 
                 @Date, 
                 @InputtedTime, 
-                @Status
+                @Status,
+                @Notify
             )";
+
+                // Ensure that tasks are created as "Pending" (status 0) by default
+                const int defaultStatusValue = 0; // Always create tasks as pending
 
                 int rowsAffected = await con.ExecuteAsync(
                     insertQuery,
@@ -100,7 +108,8 @@ public class TaskController : ControllerBase
                         TaskDescription = tasks.ScheduleTaskDescription,
                         Date = tasks.ScheduleDate,
                         InputtedTime = philippineTime,
-                        Status = tasks.ScheduleStatus ? 1 : 0
+                        Status = defaultStatusValue,  // Force status to be 0
+                        Notify = tasks.ScheduleNotify
                     }
                 );
 
@@ -114,10 +123,10 @@ public class TaskController : ControllerBase
                     action: "INSERT",
                     tableName: "Tasks",
                     recordId: 0,
-                    details: $"Task '{tasks.ScheduleTaskTitle}' added successfully."
+                    details: $"Task '{tasks.ScheduleTaskTitle}' added successfully with Status: {defaultStatusValue}."
                 );
 
-                return Ok(new { message = "User added successfully." });
+                return Ok(new { message = "Task added successfully." });
             }
             catch (Exception ex)
             {
@@ -125,22 +134,19 @@ public class TaskController : ControllerBase
             }
         }
     }
-
-
-
-
     [HttpPut("UpdateTask/{scheduleId}")]
-    public async Task<IActionResult> UpdateTask(int scheduleId, [FromBody] Tasksdto task, [FromHeader(Name = "UserName")] string userName = "System")
+    public async Task<IActionResult> UpdateTask(int scheduleId, [FromBody] Tasksdto task)
     {
         const string updateQuery = @"
-    UPDATE Tasks 
-    SET 
-        sched_taskTitle = @ScheduleTaskTitle,
-        sched_user = @ScheduleUser,
-        sched_taskDescription = @ScheduleTaskDescription,
-        sched_date = @ScheduleDate,
-        sched_status = @ScheduleStatus
-    WHERE sched_Id = @ScheduleId";
+UPDATE Tasks 
+SET 
+    sched_taskTitle = @ScheduleTaskTitle,
+    sched_user = @ScheduleUser,
+    sched_taskDescription = @ScheduleTaskDescription,
+    sched_date = @ScheduleDate,
+    sched_notify = @ScheduleNotify,
+    sched_status = @ScheduleStatus
+WHERE sched_Id = @ScheduleId";
 
         try
         {
@@ -148,7 +154,32 @@ public class TaskController : ControllerBase
             {
                 await connection.OpenAsync();
 
-                // Check if task exists
+                DateTime philippineTime = TimeZoneInfo.ConvertTimeFromUtc(
+                    DateTime.UtcNow,
+                    TimeZoneInfo.FindSystemTimeZoneById("Singapore Standard Time")
+                );
+
+                if (task.ScheduleDate.Date < philippineTime.Date)
+                {
+                    return BadRequest("Cannot update a task with a past date. Please choose a future date.");
+                }
+
+                if (task.ScheduleNotify < 0)
+                {
+                    return BadRequest("Notification time cannot be negative.");
+                }
+
+                DateTime notificationDate = task.ScheduleDate.AddDays(-task.ScheduleNotify);
+                if (notificationDate < philippineTime.Date)
+                {
+                    return BadRequest("The notification time cannot be set in the past. Please choose a valid time.");
+                }
+
+                if (task.ScheduleNotify > 30)
+                {
+                    return BadRequest("Notification time cannot exceed 30 days.");
+                }
+
                 var checkQuery = "SELECT sched_Id FROM Tasks WHERE sched_Id = @ScheduleId";
                 var existingTask = await connection.QueryFirstOrDefaultAsync<int>(checkQuery, new { ScheduleId = scheduleId });
 
@@ -157,29 +188,17 @@ public class TaskController : ControllerBase
                     return NotFound($"Task with ID {scheduleId} not found");
                 }
 
-                // Get Philippine time (UTC+8)
-                DateTime philippineTime = TimeZoneInfo.ConvertTimeFromUtc(
-                    DateTime.UtcNow,
-                    TimeZoneInfo.FindSystemTimeZoneById("Singapore Standard Time")
-                );
-
-                // Check if task date is in the past
-                if (task.ScheduleDate.Date < philippineTime.Date)
-                {
-                    return BadRequest("Cannot update a task with a past date. Please choose a future date.");
-                }
-
-                // Get current values with proper column mapping
-                var originalTask = await connection.QueryFirstOrDefaultAsync<Tasksdto>(
-                    @"SELECT 
-                sched_Id AS ScheduleId,
-                sched_taskTitle AS ScheduleTaskTitle,
-                sched_user AS ScheduleUser,
-                sched_taskDescription AS ScheduleTaskDescription,
-                sched_date AS ScheduleDate,
-                sched_status AS ScheduleStatus
-            FROM Tasks 
-            WHERE sched_Id = @ScheduleId",
+                var originalTask = await connection.QueryFirstOrDefaultAsync<Tasksdto>(@"
+                SELECT 
+                    sched_Id AS ScheduleId,
+                    sched_taskTitle AS ScheduleTaskTitle,
+                    sched_user AS ScheduleUser,
+                    sched_taskDescription AS ScheduleTaskDescription,
+                    sched_date AS ScheduleDate,
+                    sched_notify AS ScheduleNotify,
+                    sched_status AS ScheduleStatus
+                FROM Tasks 
+                WHERE sched_Id = @ScheduleId",
                     new { ScheduleId = scheduleId });
 
                 if (originalTask == null)
@@ -193,51 +212,51 @@ public class TaskController : ControllerBase
                     return NotFound($"Task {scheduleId} not found");
                 }
 
-                // Update task
+                int statusValue = task.ScheduleStatus ? 1 : 0;
+
                 await connection.ExecuteAsync(updateQuery, new
                 {
                     task.ScheduleTaskTitle,
                     task.ScheduleUser,
                     task.ScheduleTaskDescription,
                     task.ScheduleDate,
-                    task.ScheduleStatus,
+                    task.ScheduleNotify,
+                    ScheduleStatus = statusValue, // ✅ Fixed name
                     ScheduleId = scheduleId
                 });
 
-                // Track changes
                 List<string> changes = new List<string>();
 
-                // Title comparison with null handling
                 if (!string.Equals(originalTask.ScheduleTaskTitle, task.ScheduleTaskTitle, StringComparison.Ordinal))
                 {
                     changes.Add($"Task Title: \"{originalTask.ScheduleTaskTitle ?? "(empty)"}\" → \"{task.ScheduleTaskTitle ?? "(empty)"}\"");
                 }
 
-                // User comparison
                 if (!string.Equals(originalTask.ScheduleUser, task.ScheduleUser, StringComparison.Ordinal))
                 {
                     changes.Add($"User: \"{originalTask.ScheduleUser ?? "(empty)"}\" → \"{task.ScheduleUser ?? "(empty)"}\"");
                 }
 
-                // Description comparison
                 if (!string.Equals(originalTask.ScheduleTaskDescription, task.ScheduleTaskDescription, StringComparison.Ordinal))
                 {
                     changes.Add($"Description: \"{originalTask.ScheduleTaskDescription ?? "(empty)"}\" → \"{task.ScheduleTaskDescription ?? "(empty)"}\"");
                 }
 
-                // Date comparison
                 if (originalTask.ScheduleDate != task.ScheduleDate)
                 {
                     changes.Add($"Date: \"{originalTask.ScheduleDate:g}\" → \"{task.ScheduleDate:g}\"");
                 }
 
-                // Status comparison
-                if (originalTask.ScheduleStatus != task.ScheduleStatus)
+                if (originalTask.ScheduleNotify != task.ScheduleNotify)
                 {
-                    changes.Add($"Status: \"{(originalTask.ScheduleStatus ? "Active" : "Inactive")}\" → \"{(task.ScheduleStatus ? "Active" : "Inactive")}\"");
+                    changes.Add($"Notification Time: \"{originalTask.ScheduleNotify}\" → \"{task.ScheduleNotify}\"");
                 }
 
-                // Log changes if any
+                if (originalTask.ScheduleStatus != task.ScheduleStatus)
+                {
+                    changes.Add($"Status: \"{(originalTask.ScheduleStatus ? "Finished" : "Pending")}\" → \"{(task.ScheduleStatus ? "Finished" : "Pending")}\"");
+                }
+
                 if (changes.Count > 0)
                 {
                     await Logger.LogAction(HttpContext,
@@ -253,15 +272,6 @@ public class TaskController : ControllerBase
         }
         catch (Exception ex)
         {
-            // Log the error
-            await Logger.LogAction(HttpContext,
-                action: "UPDATE_ERROR",
-                tableName: "Tasks",
-                recordId: scheduleId,
-                details: $"Error updating task: {ex.Message}"
-            );
-
-            // Return error response
             return StatusCode(500, new
             {
                 Message = "An error occurred while updating the task.",
@@ -276,46 +286,53 @@ public class TaskController : ControllerBase
 
 
 
+
+
+
+
+
+
+
     //button
     [HttpDelete("DeleteTasks/{id}")]
-    public async Task<IActionResult> DeleteTasks(int id, [FromHeader(Name = "UserName")] string userName = "System")
-    {
-        if (id <= 0)
+        public async Task<IActionResult> DeleteTasks(int id, [FromHeader(Name = "UserName")] string userName = "System")
         {
-            return BadRequest("Invalid task ID.");
-        }
-
-        using var connection = new MySqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        try
-        {
-            // Fetch task details before deletion
-            var existingTask = await connection.QueryFirstOrDefaultAsync<dynamic>(
-                "SELECT sched_taskTitle, sched_taskDescription, sched_date, sched_status FROM Tasks WHERE sched_Id = @ScheduleId",
-                new { ScheduleId = id });
-
-            if (existingTask == null)
+            if (id <= 0)
             {
-                return NotFound($"No task found with ID {id}.");
+                return BadRequest("Invalid task ID.");
             }
 
-            // Extract task details safely
-            string taskTitle = existingTask?.sched_taskTitle ?? "N/A";
-            string taskDescription = existingTask?.sched_taskDescription ?? "N/A";
-            string taskDate = existingTask?.sched_date != null ? ((DateTime)existingTask.sched_date).ToString("yyyy-MM-dd") : "N/A";
-            string taskStatus = existingTask?.sched_status ?? "N/A";
+            using var connection = new MySqlConnection(_connectionString);
+            await connection.OpenAsync();
 
-            // Delete task
-            string deleteQuery = "DELETE FROM Tasks WHERE sched_Id = @ScheduleId";
-            int rowsAffected = await connection.ExecuteAsync(deleteQuery, new { ScheduleId = id });
-
-            if (rowsAffected > 0)
+            try
             {
-                Console.WriteLine($"Task ID {id} deleted successfully by {userName}.");
+                // Fetch task details before deletion
+                var existingTask = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                    "SELECT sched_taskTitle, sched_taskDescription, sched_date, sched_status FROM Tasks WHERE sched_Id = @ScheduleId",
+                    new { ScheduleId = id });
 
-                // Log deletion details similarly to update
-                List<string> changes = new List<string>
+                if (existingTask == null)
+                {
+                    return NotFound($"No task found with ID {id}.");
+                }
+
+                // Extract task details safely
+                string taskTitle = existingTask?.sched_taskTitle ?? "N/A";
+                string taskDescription = existingTask?.sched_taskDescription ?? "N/A";
+                string taskDate = existingTask?.sched_date != null ? ((DateTime)existingTask.sched_date).ToString("yyyy-MM-dd") : "N/A";
+                string taskStatus = existingTask?.sched_status ?? "N/A";
+
+                // Delete task
+                string deleteQuery = "DELETE FROM Tasks WHERE sched_Id = @ScheduleId";
+                int rowsAffected = await connection.ExecuteAsync(deleteQuery, new { ScheduleId = id });
+
+                if (rowsAffected > 0)
+                {
+                    Console.WriteLine($"Task ID {id} deleted successfully by {userName}.");
+
+                    // Log deletion details similarly to update
+                    List<string> changes = new List<string>
             {
                 $"Title: \"{taskTitle}\"",
                 $"Description: \"{taskDescription}\"",
@@ -323,33 +340,33 @@ public class TaskController : ControllerBase
                 $"Status: \"{taskStatus}\""
             };
 
-                string logMessage = $"Deleted task record (ID: {id})";
-                string details = string.Join(", ", changes);
-                await Logger.LogAction(HttpContext, logMessage, "Tasks", id, details);
+                    string logMessage = $"Deleted task record (ID: {id})";
+                    string details = string.Join(", ", changes);
+                    await Logger.LogAction(HttpContext, logMessage, "Tasks", id, details);
 
-                return Ok(new { Message = $"Task with ID {id} deleted successfully." });
+                    return Ok(new { Message = $"Task with ID {id} deleted successfully." });
+                }
+
+                return StatusCode(500, "An error occurred while deleting the task.");
             }
-
-            return StatusCode(500, "An error occurred while deleting the task.");
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error deleting task entry: {ex.Message}");
+                return StatusCode(500, new { Message = "Error deleting task entry.", ErrorDetails = ex.Message });
+            }
         }
-        catch (Exception ex)
+
+
+        //for Datagridview
+        [HttpGet("GetTasks")]
+        public async Task<IActionResult> GetTasks()
         {
-            Console.WriteLine($"Error deleting task entry: {ex.Message}");
-            return StatusCode(500, new { Message = "Error deleting task entry.", ErrorDetails = ex.Message });
-        }
-    }
+            try
+            {
+                using var con = new MySqlConnection(_connectionString);
+                await con.OpenAsync();
 
-
-    //for Datagridview
-    [HttpGet("GetTasks")]
-    public async Task<IActionResult> GetTasks()
-    {
-        try
-        {
-            using var con = new MySqlConnection(_connectionString);
-            await con.OpenAsync();
-
-            string query = @"
+                string query = @"
         SELECT 
             sched_Id, 
             sched_taskTitle,
@@ -360,7 +377,7 @@ public class TaskController : ControllerBase
             sched_status 
         FROM Tasks";
 
-            var tasks = await con.QueryAsync<Tasksdto>(@"
+                var tasks = await con.QueryAsync<Tasksdto>(@"
         SELECT 
             sched_Id AS ScheduleId, 
             sched_taskTitle AS ScheduleTaskTitle,
@@ -371,91 +388,91 @@ public class TaskController : ControllerBase
             sched_status AS ScheduleStatus 
         FROM Tasks");
 
-            return Ok(tasks);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error retrieving tasks: {ex.Message}");
-            return StatusCode(500, $"An error occurred while retrieving tasks: {ex.Message}");
-        }
-    }
-
-
-
-    [HttpGet("CountTasks")]
-    public async Task<IActionResult> CountTasks()
-    {
-        using var con = new MySqlConnection(_connectionString);
-        await con.OpenAsync();
-
-        string query = "SELECT COUNT(*) FROM Tasks";
-        int count = await con.ExecuteScalarAsync<int>(query);
-        return Ok(count);
-    }
-
-    [HttpGet("UpcomingTasks")]
-    public async Task<IActionResult> UpcomingTasks()
-    {
-        using var con = new MySqlConnection(_connectionString);
-        await con.OpenAsync();
-
-        string query = "SELECT COUNT(*) FROM Tasks WHERE sched_date > CURDATE()";
-        int count = await con.ExecuteScalarAsync<int>(query);
-        return Ok(count);
-    }
-
-    [HttpGet("DueTodayTasks")]
-    public async Task<IActionResult> DueTodayTasks()
-    {
-        using var con = new MySqlConnection(_connectionString);
-        await con.OpenAsync();
-
-        string query = "SELECT COUNT(*) FROM Tasks WHERE sched_date = CURDATE()";
-        int count = await con.ExecuteScalarAsync<int>(query);
-        return Ok(count);
-    }
-
-    [HttpGet("OverDueTasks")]
-    public async Task<IActionResult> OverDueTasks()
-    {
-        using var con = new MySqlConnection(_connectionString);
-        await con.OpenAsync();
-
-        string query = "SELECT COUNT(*) FROM Tasks WHERE sched_date < CURDATE()";
-        int count = await con.ExecuteScalarAsync<int>(query);
-        return Ok(count);
-    }
-
-    //Combobox get users
-    [HttpGet("GetUsers")]
-    public async Task<IActionResult> GetUsers()
-    {
-        using var con = new MySqlConnection(_connectionString);
-        await con.OpenAsync();
-
-        string query = "SELECT user_Fname, user_Lname FROM ManageUsers";
-        using var cmd = new MySqlCommand(query, con);
-        using var reader = await cmd.ExecuteReaderAsync();
-
-        var users = new List<FullnameDto>();
-        while (await reader.ReadAsync())
-        {
-            users.Add(new FullnameDto
+                return Ok(tasks);
+            }
+            catch (Exception ex)
             {
-                Name = $"{reader["user_Fname"]?.ToString()} {reader["user_Lname"]?.ToString()}".Trim()
-            });
+                Console.WriteLine($"Error retrieving tasks: {ex.Message}");
+                return StatusCode(500, $"An error occurred while retrieving tasks: {ex.Message}");
+            }
         }
 
-        return Ok(users);
-    }
 
 
-    [HttpGet("export-tasks")]
-    public async Task<IActionResult> ExportTasksReport()
-    {
-        try
+        [HttpGet("CountTasks")]
+        public async Task<IActionResult> CountTasks()
         {
-            string query = @"
+            using var con = new MySqlConnection(_connectionString);
+            await con.OpenAsync();
+
+            string query = "SELECT COUNT(*) FROM Tasks";
+            int count = await con.ExecuteScalarAsync<int>(query);
+            return Ok(count);
+        }
+
+        [HttpGet("UpcomingTasks")]
+        public async Task<IActionResult> UpcomingTasks()
+        {
+            using var con = new MySqlConnection(_connectionString);
+            await con.OpenAsync();
+
+            string query = "SELECT COUNT(*) FROM Tasks WHERE sched_date > CURDATE()";
+            int count = await con.ExecuteScalarAsync<int>(query);
+            return Ok(count);
+        }
+
+        [HttpGet("DueTodayTasks")]
+        public async Task<IActionResult> DueTodayTasks()
+        {
+            using var con = new MySqlConnection(_connectionString);
+            await con.OpenAsync();
+
+            string query = "SELECT COUNT(*) FROM Tasks WHERE sched_date = CURDATE()";
+            int count = await con.ExecuteScalarAsync<int>(query);
+            return Ok(count);
+        }
+
+        [HttpGet("OverDueTasks")]
+        public async Task<IActionResult> OverDueTasks()
+        {
+            using var con = new MySqlConnection(_connectionString);
+            await con.OpenAsync();
+
+            string query = "SELECT COUNT(*) FROM Tasks WHERE sched_date < CURDATE()";
+            int count = await con.ExecuteScalarAsync<int>(query);
+            return Ok(count);
+        }
+
+        //Combobox get users
+        [HttpGet("GetUsers")]
+        public async Task<IActionResult> GetUsers()
+        {
+            using var con = new MySqlConnection(_connectionString);
+            await con.OpenAsync();
+
+            string query = "SELECT user_Fname, user_Lname FROM ManageUsers";
+            using var cmd = new MySqlCommand(query, con);
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            var users = new List<FullnameDto>();
+            while (await reader.ReadAsync())
+            {
+                users.Add(new FullnameDto
+                {
+                    Name = $"{reader["user_Fname"]?.ToString()} {reader["user_Lname"]?.ToString()}".Trim()
+                });
+            }
+
+            return Ok(users);
+        }
+
+
+        [HttpGet("export-tasks")]
+        public async Task<IActionResult> ExportTasksReport()
+        {
+            try
+            {
+                string query = @"
                 SELECT 
                     sched_id AS ScheduleId,
                     sched_taskTitle AS ScheduleTaskTitle,
@@ -474,61 +491,61 @@ public class TaskController : ControllerBase
                          CASE WHEN is_past = 1 THEN sched_date END DESC,
                          ScheduleInputted DESC";
 
-            using var connection = new MySqlConnection(_connectionString);
-            var taskData = (await connection.QueryAsync<Tasksdto>(query)).ToList();
+                using var connection = new MySqlConnection(_connectionString);
+                var taskData = (await connection.QueryAsync<Tasksdto>(query)).ToList();
 
-            Console.WriteLine($"Retrieved {taskData.Count} task records.");
+                Console.WriteLine($"Retrieved {taskData.Count} task records.");
 
-            if (!taskData.Any())
-            {
-                return NotFound("No task records found.");
+                if (!taskData.Any())
+                {
+                    return NotFound("No task records found.");
+                }
+
+                using var workbook = new XLWorkbook();
+                var worksheet = workbook.Worksheets.Add("Task Schedule");
+                worksheet.Cell("A1").Value = "TASK SCHEDULE REPORT";
+                worksheet.Range("A1:F1").Merge().Style.Font.SetBold(true).Font.SetFontSize(14).Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+                worksheet.Cell("A2").Value = $"Date Exported: {DateTime.Now:MM/dd/yyyy hh:mm tt}";
+                worksheet.Range("A2:F2").Merge().Style.Font.SetItalic(true).Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+
+                var headers = new[] { "Task Title", "User", "Description", "Task Date", "Date Inputted", "Status" };
+                for (int i = 0; i < headers.Length; i++)
+                {
+                    worksheet.Cell(4, i + 1).Value = headers[i];
+                    worksheet.Cell(4, i + 1).Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.LightGray).Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+                }
+
+                int row = 5;
+                foreach (var record in taskData)
+                {
+                    worksheet.Cell(row, 1).Value = record.ScheduleTaskTitle ?? "N/A";
+                    worksheet.Cell(row, 2).Value = record.ScheduleUser ?? "N/A";
+                    worksheet.Cell(row, 3).Value = record.ScheduleTaskDescription ?? "N/A";
+                    worksheet.Cell(row, 4).Value = record.ScheduleDate != null ? record.ScheduleDate.ToString("yyyy-MM-dd HH:mm:ss") : "N/A";
+                    worksheet.Cell(row, 5).Value = record.ScheduleInputted.ToString("yyyy-MM-dd HH:mm:ss");
+                    worksheet.Cell(row, 6).Value = record.ScheduleStatus ? "Completed" : "Pending";
+                    row++;
+                }
+
+                worksheet.Columns().AdjustToContents();
+                for (int i = 1; i <= headers.Length; i++)
+                {
+                    if (worksheet.Column(i).Width < 15)
+                        worksheet.Column(i).Width = 15;
+                }
+
+                using var stream = new MemoryStream();
+                workbook.SaveAs(stream);
+                stream.Position = 0;
+                return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"Task_Report_{DateTime.Now:yyyyMMdd}.xlsx");
             }
-
-            using var workbook = new XLWorkbook();
-            var worksheet = workbook.Worksheets.Add("Task Schedule");
-            worksheet.Cell("A1").Value = "TASK SCHEDULE REPORT";
-            worksheet.Range("A1:F1").Merge().Style.Font.SetBold(true).Font.SetFontSize(14).Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
-            worksheet.Cell("A2").Value = $"Date Exported: {DateTime.Now:MM/dd/yyyy hh:mm tt}";
-            worksheet.Range("A2:F2").Merge().Style.Font.SetItalic(true).Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
-
-            var headers = new[] { "Task Title", "User", "Description", "Task Date", "Date Inputted", "Status" };
-            for (int i = 0; i < headers.Length; i++)
+            catch (Exception ex)
             {
-                worksheet.Cell(4, i + 1).Value = headers[i];
-                worksheet.Cell(4, i + 1).Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.LightGray).Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+                Console.WriteLine($"Error exporting task data: {ex.Message}");
+                return StatusCode(500, $"Error exporting task data: {ex.Message}");
             }
-
-            int row = 5;
-            foreach (var record in taskData)
-            {
-                worksheet.Cell(row, 1).Value = record.ScheduleTaskTitle ?? "N/A";
-                worksheet.Cell(row, 2).Value = record.ScheduleUser ?? "N/A";
-                worksheet.Cell(row, 3).Value = record.ScheduleTaskDescription ?? "N/A";
-                worksheet.Cell(row, 4).Value = record.ScheduleDate != null ? record.ScheduleDate.ToString("yyyy-MM-dd HH:mm:ss") : "N/A";
-                worksheet.Cell(row, 5).Value = record.ScheduleInputted.ToString("yyyy-MM-dd HH:mm:ss");
-                worksheet.Cell(row, 6).Value = record.ScheduleStatus ? "Completed" : "Pending";
-                row++;
-            }
-
-            worksheet.Columns().AdjustToContents();
-            for (int i = 1; i <= headers.Length; i++)
-            {
-                if (worksheet.Column(i).Width < 15)
-                    worksheet.Column(i).Width = 15;
-            }
-
-            using var stream = new MemoryStream();
-            workbook.SaveAs(stream);
-            stream.Position = 0;
-            return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"Task_Report_{DateTime.Now:yyyyMMdd}.xlsx");
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error exporting task data: {ex.Message}");
-            return StatusCode(500, $"Error exporting task data: {ex.Message}");
-        }
+
+
     }
 
-
-
-}
