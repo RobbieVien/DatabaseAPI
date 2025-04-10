@@ -28,58 +28,69 @@ public class NotificationController : ControllerBase
         await con.OpenAsync();
 
         string query = @"
-SELECT 
-    sched_taskTitle AS Title,
-    sched_taskDescription AS Description,
-    CASE 
-        WHEN sched_status = 0 THEN 'Pending'
-        ELSE 'Finished'
-    END AS Status,
-    'Task' AS Type,
-    DATE(sched_date) AS DueDate,
-    TIME(sched_date) AS DueTime
-FROM Tasks 
-WHERE 
-    sched_status = 0 -- Only show pending tasks
-    AND (
-        (sched_date >= CURDATE()) -- Show tasks with future due dates
-        OR
-        (sched_date < CURDATE() AND DATEDIFF(CURDATE(), sched_date) <= sched_notify) -- Show past tasks within the notification range
-    )
+        SELECT 
+            sched_taskTitle AS Title,
+            sched_taskDescription AS Description,
+            CASE 
+                WHEN sched_status = 0 THEN 'Pending'
+                ELSE 'Finished'
+            END AS Status,
+            'Task' AS Type,
+            DATE(sched_date) AS DueDate,
+            TIME(sched_date) AS DueTime,
+            sched_date AS SortDateTime -- For sorting
+        FROM Tasks 
+        WHERE 
+            sched_status = 0
+            AND (
+                (sched_date >= CURDATE())
+                OR
+                (sched_date < CURDATE() AND sched_notify > 0)
+            )
 
-UNION ALL
+        UNION ALL
 
-SELECT 
-    TRIM(hearing_Case_Title) AS Title,
-    TRIM(hearing_Case_Num) AS Description,
-    TRIM(hearing_case_status) AS Status,
-    'Hearing' AS Type,
-    DATE(hearing_Case_Date) AS DueDate,
-    TIME(hearing_Case_Date) AS DueTime
-FROM Hearing 
-WHERE 
-    DATEDIFF(hearing_Case_Date, CURDATE()) >= 0 -- Only show future hearings
-    AND TRIM(hearing_case_status) = 'Pending'
-    AND hearing_case_status != 'Checked'
+        SELECT 
+            TRIM(hearing_Case_Title) AS Title,
+            TRIM(hearing_Case_Num) AS Description,
+            CASE 
+                WHEN hearing_case_status = 0 THEN 'Pending'
+                ELSE 'Finished'
+            END AS Status,
+            'Hearing' AS Type,
+            DATE(hearing_Case_Date) AS DueDate,
+            TIME(hearing_Case_Time) AS DueTime,
+            hearing_Case_Date AS SortDateTime -- For sorting
+        FROM Hearing 
+        WHERE 
+            hearing_case_status = 0
+            AND (
+                (hearing_Case_Date >= CURDATE())
+                OR
+                (hearing_Case_Date < CURDATE() AND hearing_notify > 0)
+            )
 
-UNION ALL
+        UNION ALL
 
-SELECT 
-    CONCAT(marriage_brideFirstname, ' ', marriage_brideLastname, ' & ', marriage_groomFirstname, ' ', marriage_groomlastname) AS Title,
-    CONCAT('Marriage scheduled for ', DATE_FORMAT(marriage_startin, '%Y-%m-%d')) AS Description,
-    CASE 
-        WHEN marriage_checkbox = 1 THEN 'Finished'
-        ELSE 'Pending'
-    END AS Status,
-    'Marriage' AS Type,
-    DATE(marriage_startin) AS DueDate,
-    TIME(marriage_startin) AS DueTime
-FROM Marriage
-WHERE 
-    (DATEDIFF(marriage_startin, CURDATE()) >= 0 -- Only show future marriages
-    OR (DATEDIFF(CURDATE(), marriage_startin) <= marriage_notifyme AND marriage_checkbox = 0)) -- Show past marriages within the notification range
-    AND marriage_notifyme = 1
-    AND marriage_checkbox = 0;";
+        SELECT 
+            CONCAT(marriage_brideFirstname, ' ', marriage_brideLastname, ' & ', marriage_groomFirstname, ' ', marriage_groomlastname) AS Title,
+            CONCAT('Marriage scheduled for ', DATE_FORMAT(marriage_startin, '%Y-%m-%d')) AS Description,
+            CASE 
+                WHEN marriage_checkbox = 1 THEN 'Finished'
+                ELSE 'Pending'
+            END AS Status,
+            'Marriage' AS Type,
+            DATE(marriage_startin) AS DueDate,
+            TIME(marriage_startin) AS DueTime,
+            marriage_startin AS SortDateTime -- For sorting
+        FROM Marriage
+        WHERE 
+            (DATEDIFF(marriage_startin, CURDATE()) >= 0
+            OR (DATEDIFF(CURDATE(), marriage_startin) <= marriage_notifyme AND marriage_checkbox = 0))
+            AND marriage_notifyme = 1
+            AND marriage_checkbox = 0
+
+        ORDER BY SortDateTime ASC";
 
         using var cmd = new MySqlCommand(query, con);
         try

@@ -3,15 +3,27 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using DatabaseAPI.Utilities;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Initialize the Logger (This is where Logger.Initialize should be called)
 Logger.Initialize(builder.Configuration);
 
-builder.Services.AddControllers();
+//binagoko
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new DateOnlyJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new TimeOnlyJsonConverter());
+    });
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+//etopaisa
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SchemaFilter<DateOnlySchemaFilter>();
+});
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll",

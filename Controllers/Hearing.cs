@@ -26,74 +26,101 @@ public class HearingController : ControllerBase
     private readonly IConfiguration _configuration;
 
     [HttpPost("AddHearing")]
-    public async Task<ActionResult<string>> AddHearing([FromBody] Hearingdto hearing)
+    public async Task<IActionResult> AddHearing([FromBody] Hearingdto hearing)
     {
-        // Validate input
-        if (hearing == null || string.IsNullOrWhiteSpace(hearing.HearingCaseTitle) ||
-            string.IsNullOrWhiteSpace(hearing.HearingCaseNumber))
+        if (hearing == null)
         {
-            return BadRequest("Invalid Hearing data.");
+            return BadRequest("Invalid hearing data.");
         }
 
-        // Get Philippine time zone
+        // Time zone conversion for Philippine time
         TimeZoneInfo philippineTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila");
         DateTime philippineNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, philippineTimeZone);
 
-        // Parse date and time
-        if (!DateTime.TryParse(hearing.HearingCaseDate, out DateTime hearingDate) ||
-            !TimeSpan.TryParse(hearing.HearingCaseTime, out TimeSpan hearingTime))
+        // Set the hearing date and time to the current Philippine time if not provided
+        if (hearing.HearingCaseDate == DateOnly.MinValue || hearing.HearingCaseTime == TimeOnly.MinValue)
         {
-            return BadRequest("Invalid date or time format.");
+            hearing.HearingCaseDate = DateOnly.FromDateTime(philippineNow);  // Current date
+            hearing.HearingCaseTime = TimeOnly.FromDateTime(philippineNow);  // Current time
         }
 
-        // Combine hearing date and time
-        DateTime hearingDateTime = hearingDate.Date.Add(hearingTime);
+        // Automatically set the HearingCaseInputted to the current Philippine date and time
+        string hearingCaseInputted = philippineNow.ToString("yyyy-MM-dd HH:mm:ss"); // Format as DATETIME string
 
-        // Check if hearing is in the past with a buffer of 1 minute to account for processing time
-        if (hearingDateTime < philippineNow.AddMinutes(1))
+        // Convert DateOnly to DateTime
+        DateTime hearingDateTime = hearing.HearingCaseDate.ToDateTime(hearing.HearingCaseTime); // combine DateOnly and TimeOnly
+
+        // Validate that the hearing date and time are not in the past
+        if (hearingDateTime < philippineNow)
         {
-            return BadRequest("Cannot add a hearing with a past or immediate date and time. Please choose a future time.");
+            return BadRequest("Cannot add a hearing with a past date and time.");
         }
 
-        string insertQuery = @"
-            INSERT INTO Hearing 
-            (hearing_Case_Title, hearing_Case_Num, hearing_Case_Date, hearing_Case_Time, 
-             hearing_Case_Inputted, hearing_case_status)
-            VALUES 
-            (@CaseTitle, @CaseNumber, @CaseDate, @CaseTime, 
-             CONVERT_TZ(NOW(), '+00:00', '+08:00'), @CaseStatus)";
-
-        var parameters = new DynamicParameters();
-        parameters.Add("@CaseTitle", hearing.HearingCaseTitle.Trim());
-        parameters.Add("@CaseNumber", hearing.HearingCaseNumber.Trim());
-        parameters.Add("@CaseDate", hearingDate);
-        parameters.Add("@CaseTime", hearingTime);
-        parameters.Add("@CaseStatus", hearing.HearingCaseStatus ? 1 : 0);
+        using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync();
 
         try
         {
-            using (var connection = new MySqlConnection(_connectionString))
+            // Prepare the insert query
+            string query = @"
+        INSERT INTO Hearing 
+        (hearing_Case_Title, hearing_Case_Num, hearing_Case_Date, hearing_Case_Time, hearing_case_status, 
+        hearing_Judge, hearing_trial_prosecutor, hearing_branch_clerk, hearing_public_attorney, 
+        hearing_court_interpreter, hearing_court_stenographer, hearing_notify, hearing_Case_Inputted)
+        VALUES 
+        (@CaseTitle, @CaseNumber, @CaseDate, @CaseTime, @CaseStatus, 
+        @Judge, @Prosecutor, @BranchClerk, @PublicAttorney, 
+        @CourtInterpreter, @CourtStenographer, @HearingNotify, @CaseInputted);
+        SELECT LAST_INSERT_ID();"; // Return the ID of the newly inserted record
+
+            // Convert DateOnly to DateTime for database compatibility
+            DateTime caseDateAsDateTime = new DateTime(hearing.HearingCaseDate.Year,
+                                                       hearing.HearingCaseDate.Month,
+                                                       hearing.HearingCaseDate.Day);
+
+            // Convert TimeOnly to TimeSpan for database compatibility
+            TimeSpan caseTimeAsTimeSpan = new TimeSpan(
+                hearing.HearingCaseTime.Hour,
+                hearing.HearingCaseTime.Minute,
+                hearing.HearingCaseTime.Second);
+
+            // Execute the insert query and get the new ID
+            var newId = await connection.ExecuteScalarAsync<int>(query, new
             {
-                await connection.OpenAsync();
-                await connection.ExecuteAsync(insertQuery, parameters);
-            }
+                CaseTitle = hearing.HearingCaseTitle ?? string.Empty,
+                CaseNumber = hearing.HearingCaseNumber ?? string.Empty,
+                CaseDate = caseDateAsDateTime, // Use converted DateTime
+                CaseTime = caseTimeAsTimeSpan, // Use converted TimeSpan
+                CaseStatus = hearing.HearingCaseStatus ? 1 : 0,
+                Judge = hearing.HearingJudge ?? string.Empty,
+                Prosecutor = hearing.HearingTrialProsecutor ?? string.Empty,
+                BranchClerk = hearing.HearingBranchClerk ?? string.Empty,
+                PublicAttorney = hearing.HearingPublicAttorney ?? string.Empty,
+                CourtInterpreter = hearing.HearingCourtInterpreter ?? string.Empty,
+                CourtStenographer = hearing.HearingCourtStenographer ?? string.Empty,
+                HearingNotify = hearing.HearingNotify,
+                CaseInputted = hearingCaseInputted // Use the auto-generated time for HearingCaseInputted
+            });
 
-            // Log the action
             await Logger.LogAction(HttpContext, $"Hearing {hearing.HearingCaseTitle} has been added.", "Hearing", 0);
-
             return Ok(new { message = "Hearing added successfully." });
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error: {ex.Message}");
-            return StatusCode(500, "An error occurred while adding the hearing.");
+            return StatusCode(500, new { message = "An error occurred while adding the hearing." });
         }
     }
 
 
 
+
+
+
+
+
     [HttpPut("UpdateCourtHearing/{id}")]
-    public async Task<IActionResult> UpdateCourtHearing(int id, [FromBody] Hearingdto hearing, [FromHeader(Name = "UserName")] string userName = "System")
+    public async Task<IActionResult> UpdateCourtHearing(int id, [FromBody] Hearingdto hearing)
     {
         if (hearing == null)
         {
@@ -115,8 +142,8 @@ public class HearingController : ControllerBase
         DateTime philippineNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, philippineTimeZone);
 
         // Validate date and time
-        if (!DateTime.TryParse(hearing.HearingCaseDate, out DateTime hearingDate) ||
-            !TimeSpan.TryParse(hearing.HearingCaseTime, out TimeSpan hearingTime))
+        if (!DateTime.TryParse(hearing.HearingCaseDate.ToString("yyyy-MM-dd"), out DateTime hearingDate) ||
+            !TimeSpan.TryParse(hearing.HearingCaseTime.ToString("HH:mm:ss"), out TimeSpan hearingTime))
         {
             return BadRequest("Invalid date or time format.");
         }
@@ -137,8 +164,10 @@ public class HearingController : ControllerBase
         {
             // Fetch old values from DB
             var existingHearing = await connection.QueryFirstOrDefaultAsync<dynamic>(
-                @"SELECT hearing_Case_Title, hearing_Case_Num, hearing_Case_Date, hearing_Case_Time, hearing_case_status 
-            FROM Hearing WHERE hearing_Id = @HearingId",
+                @"SELECT hearing_Case_Title, hearing_Case_Num, hearing_Case_Date, hearing_Case_Time, hearing_case_status, 
+                  hearing_Judge, hearing_trial_prosecutor, hearing_branch_clerk, hearing_public_attorney,
+                  hearing_court_interpreter, hearing_court_stenographer, hearing_notify
+        FROM Hearing WHERE hearing_Id = @HearingId",
                 new { HearingId = id });
 
             if (existingHearing == null)
@@ -154,49 +183,116 @@ public class HearingController : ControllerBase
                 ? ((TimeSpan)existingHearing.hearing_Case_Time).ToString(@"hh\:mm\:ss")
                 : "";
 
-            bool oldCaseStatus = existingHearing?.hearing_case_status == 1;
+            // Convert the database integer value to boolean (1 = true, 0 = false)
+            bool oldCaseStatus = Convert.ToInt32(existingHearing.hearing_case_status) == 1;
+            int oldNotifyValue = Convert.ToInt32(existingHearing.hearing_notify);
+
+            // New values (from the hearing DTO)
+            string newCaseTitle = hearing.HearingCaseTitle ?? "";
+            string newCaseNumber = hearing.HearingCaseNumber ?? "";
+            string newCaseDate = hearing.HearingCaseDate.ToString("yyyy-MM-dd");
+            string newCaseTime = hearing.HearingCaseTime.ToString("HH:mm:ss");
+            bool newCaseStatus = hearing.HearingCaseStatus;
+            int newNotifyValue = hearing.HearingNotify;
 
             // Compare old and new values to track changes
             List<string> changes = new List<string>();
 
-            if (!string.Equals(oldCaseTitle, hearing.HearingCaseTitle ?? "", StringComparison.Ordinal))
+            if (!string.Equals(oldCaseTitle, newCaseTitle, StringComparison.Ordinal))
             {
-                changes.Add($"Case Title: \"{oldCaseTitle}\" → \"{hearing.HearingCaseTitle}\"");
+                changes.Add($"Case Title: \"{oldCaseTitle}\" → \"{newCaseTitle}\"");
             }
-            if (!string.Equals(oldCaseNumber, hearing.HearingCaseNumber ?? "", StringComparison.Ordinal))
+            if (!string.Equals(oldCaseNumber, newCaseNumber, StringComparison.Ordinal))
             {
-                changes.Add($"Case Number: \"{oldCaseNumber}\" → \"{hearing.HearingCaseNumber}\"");
+                changes.Add($"Case Number: \"{oldCaseNumber}\" → \"{newCaseNumber}\"");
             }
-            if (!string.Equals(oldCaseDate, hearing.HearingCaseDate ?? "", StringComparison.Ordinal))
+            if (!string.Equals(oldCaseDate, newCaseDate, StringComparison.Ordinal))
             {
-                changes.Add($"Case Date: \"{oldCaseDate}\" → \"{hearing.HearingCaseDate}\"");
+                changes.Add($"Case Date: \"{oldCaseDate}\" → \"{newCaseDate}\"");
             }
-            if (!string.Equals(oldCaseTime, hearing.HearingCaseTime ?? "", StringComparison.Ordinal))
+            if (!string.Equals(oldCaseTime, newCaseTime, StringComparison.Ordinal))
             {
-                changes.Add($"Case Time: \"{oldCaseTime}\" → \"{hearing.HearingCaseTime}\"");
-            }
-            if (oldCaseStatus != hearing.HearingCaseStatus)
-            {
-                changes.Add($"Case Status: \"{(oldCaseStatus ? "Active" : "Finished")}\" → \"{(hearing.HearingCaseStatus ? "Active" : "Finished")}\"");
+                changes.Add($"Case Time: \"{oldCaseTime}\" → \"{newCaseTime}\"");
             }
 
-            // Perform update
+            if (oldCaseStatus != newCaseStatus)
+            {
+                changes.Add($"Case Status: \"{(oldCaseStatus ? "Active" : "Finished")}\" → \"{(newCaseStatus ? "Active" : "Finished")}\"");
+            }
+
+            if (oldNotifyValue != newNotifyValue)
+            {
+                changes.Add($"Notify Status: \"{oldNotifyValue}\" → \"{newNotifyValue}\"");
+            }
+
+            // Add other fields like HearingJudge, Prosecutor, etc.
+            if (existingHearing.hearing_Judge?.ToString() != hearing.HearingJudge)
+            {
+                changes.Add($"Judge: \"{existingHearing.hearing_Judge}\" → \"{hearing.HearingJudge}\"");
+            }
+            if (existingHearing.hearing_trial_prosecutor?.ToString() != hearing.HearingTrialProsecutor)
+            {
+                changes.Add($"Trial Prosecutor: \"{existingHearing.hearing_trial_prosecutor}\" → \"{hearing.HearingTrialProsecutor}\"");
+            }
+            if (existingHearing.hearing_branch_clerk?.ToString() != hearing.HearingBranchClerk)
+            {
+                changes.Add($"Branch Clerk: \"{existingHearing.hearing_branch_clerk}\" → \"{hearing.HearingBranchClerk}\"");
+            }
+            if (existingHearing.hearing_public_attorney?.ToString() != hearing.HearingPublicAttorney)
+            {
+                changes.Add($"Public Attorney: \"{existingHearing.hearing_public_attorney}\" → \"{hearing.HearingPublicAttorney}\"");
+            }
+            if (existingHearing.hearing_court_interpreter?.ToString() != hearing.HearingCourtInterpreter)
+            {
+                changes.Add($"Court Interpreter: \"{existingHearing.hearing_court_interpreter}\" → \"{hearing.HearingCourtInterpreter}\"");
+            }
+            if (existingHearing.hearing_court_stenographer?.ToString() != hearing.HearingCourtStenographer)
+            {
+                changes.Add($"Court Stenographer: \"{existingHearing.hearing_court_stenographer}\" → \"{hearing.HearingCourtStenographer}\"");
+            }
+
+            // Perform update, excluding hearing_Case_Inputted
             string query = @"UPDATE Hearing 
-                   SET hearing_Case_Title = @CaseTitle, 
-                       hearing_Case_Num = @CaseNumber, 
-                       hearing_Case_Date = @CaseDate,
-                       hearing_Case_Time = @CaseTime,
-                       hearing_case_status = @CaseStatus 
-                   WHERE hearing_Id = @HearingId";
+        SET hearing_Case_Title = @CaseTitle, 
+            hearing_Case_Num = @CaseNumber, 
+            hearing_Case_Date = @CaseDate,
+            hearing_Case_Time = @CaseTime,
+            hearing_case_status = @CaseStatus,
+            hearing_Judge = @HearingJudge,
+            hearing_trial_prosecutor = @TrialProsecutor,
+            hearing_branch_clerk = @BranchClerk,
+            hearing_public_attorney = @PublicAttorney,
+            hearing_court_interpreter = @CourtInterpreter,
+            hearing_court_stenographer = @CourtStenographer,
+            hearing_notify = @HearingNotify
+        WHERE hearing_Id = @HearingId";
+
+            // Convert DateOnly to DateTime for database compatibility
+            DateTime caseDateAsDateTime = new DateTime(hearing.HearingCaseDate.Year,
+                                                     hearing.HearingCaseDate.Month,
+                                                     hearing.HearingCaseDate.Day);
+
+            // Convert TimeOnly to TimeSpan for database compatibility
+            TimeSpan caseTimeAsTimeSpan = new TimeSpan(
+                hearing.HearingCaseTime.Hour,
+                hearing.HearingCaseTime.Minute,
+                hearing.HearingCaseTime.Second);
 
             var result = await connection.ExecuteAsync(query, new
             {
                 CaseTitle = hearing.HearingCaseTitle ?? oldCaseTitle,
                 CaseNumber = hearing.HearingCaseNumber ?? oldCaseNumber,
-                CaseDate = hearing.HearingCaseDate ?? oldCaseDate,
-                CaseTime = hearing.HearingCaseTime ?? oldCaseTime,
+                CaseDate = caseDateAsDateTime,  // Use converted DateTime instead of DateOnly
+                CaseTime = caseTimeAsTimeSpan,  // Use converted TimeSpan instead of TimeOnly
                 CaseStatus = hearing.HearingCaseStatus ? 1 : 0,
-                HearingId = id
+                HearingId = id,
+                HearingJudge = hearing.HearingJudge ?? existingHearing.hearing_Judge?.ToString(),
+                TrialProsecutor = hearing.HearingTrialProsecutor ?? existingHearing.hearing_trial_prosecutor?.ToString(),
+                BranchClerk = hearing.HearingBranchClerk ?? existingHearing.hearing_branch_clerk?.ToString(),
+                PublicAttorney = hearing.HearingPublicAttorney ?? existingHearing.hearing_public_attorney?.ToString(),
+                CourtInterpreter = hearing.HearingCourtInterpreter ?? existingHearing.hearing_court_interpreter?.ToString(),
+                CourtStenographer = hearing.HearingCourtStenographer ?? existingHearing.hearing_court_stenographer?.ToString(),
+                HearingNotify = hearing.HearingNotify // Using int directly now
             });
 
             if (result > 0)
@@ -206,20 +302,25 @@ public class HearingController : ControllerBase
                 {
                     string logMessage = $"Updated hearing record (ID: {id})";
                     string details = string.Join(", ", changes);
+                    // This is where we log the details to the Logger
                     await Logger.LogAction(HttpContext, logMessage, "HEARING", id, details);
                 }
 
-                return Ok(new { Message = $"Hearing entry with ID {id} updated successfully." });
+                return Ok(new { message = "Hearing updated successfully." });
             }
-
-            return StatusCode(500, "No changes were made.");
+            else
+            {
+                return StatusCode(500, "Error updating hearing.");
+            }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error: {ex.Message}");
-            return StatusCode(500, new { message = $"Error updating hearing: {ex.Message}" });
+            return StatusCode(500, $"Error updating hearing: {ex.Message}");
         }
     }
+
+
+
 
 
 
@@ -303,13 +404,19 @@ public class HearingController : ControllerBase
         await con.OpenAsync();
 
         string query = @"SELECT hearing_Id, 
-                            hearing_Case_Title, 
-                            hearing_Case_Num, 
-                            DATE_FORMAT(hearing_Case_Date, '%Y-%m-%d') AS hearing_Case_Date, 
-                            TIME_FORMAT(hearing_Case_Time, '%H:%i:%s') AS hearing_Case_Time, 
-                            DATE_FORMAT(hearing_Case_Inputted, '%Y-%m-%d %H:%i:%s') AS hearing_Case_Inputted, 
-                            hearing_case_status 
-                     FROM Hearing";
+                         hearing_Case_Title, 
+                         hearing_Case_Num, 
+                         DATE_FORMAT(hearing_Case_Date, '%Y-%m-%d') AS hearing_Case_Date, 
+                         hearing_Case_Time, 
+                         DATE_FORMAT(hearing_Case_Inputted, '%Y-%m-%d %H:%i:%s') AS hearing_Case_Inputted, 
+                         hearing_case_status,
+                         hearing_Judge,
+                         hearing_trial_prosecutor,
+                         hearing_branch_clerk,
+                         hearing_public_attorney,
+                         hearing_court_interpreter,
+                         hearing_court_stenographer
+                  FROM Hearing";
 
         using var cmd = new MySqlCommand(query, con);
         using var reader = await cmd.ExecuteReaderAsync();
@@ -322,15 +429,26 @@ public class HearingController : ControllerBase
                 HearingId = Convert.ToInt32(reader["hearing_Id"]),
                 HearingCaseTitle = reader["hearing_Case_Title"]?.ToString(),
                 HearingCaseNumber = reader["hearing_Case_Num"]?.ToString(),
-                HearingCaseDate = reader["hearing_Case_Date"]?.ToString() ?? string.Empty,
-                HearingCaseTime = reader["hearing_Case_Time"]?.ToString() ?? string.Empty,
+                HearingCaseDate = reader["hearing_Case_Date"] != DBNull.Value ? DateOnly.Parse(reader["hearing_Case_Date"].ToString()) : DateOnly.MinValue,
+                HearingCaseTime = reader["hearing_Case_Time"] != DBNull.Value
+                    ? TimeOnly.FromTimeSpan((TimeSpan)reader["hearing_Case_Time"])
+                    : TimeOnly.MinValue,
                 HearingCaseInputted = reader["hearing_Case_Inputted"]?.ToString() ?? string.Empty,
-                HearingCaseStatus = Convert.ToBoolean(reader["hearing_case_status"]) // Convert BIT to bool
+                HearingCaseStatus = Convert.ToBoolean(reader["hearing_case_status"]),
+                HearingJudge = reader["hearing_Judge"]?.ToString(),
+                HearingTrialProsecutor = reader["hearing_trial_prosecutor"]?.ToString(),
+                HearingBranchClerk = reader["hearing_branch_clerk"]?.ToString(),
+                HearingPublicAttorney = reader["hearing_public_attorney"]?.ToString(),
+                HearingCourtInterpreter = reader["hearing_court_interpreter"]?.ToString(),
+                HearingCourtStenographer = reader["hearing_court_stenographer"]?.ToString()
             });
         }
 
         return Ok(hearings);
     }
+
+
+
 
 
 
@@ -454,7 +572,7 @@ public class HearingController : ControllerBase
             });
         }
     }
-
+    /*
     [HttpGet("export-hearing")]
     public async Task<IActionResult> ExportHearingReport()
     {
@@ -563,5 +681,6 @@ public class HearingController : ControllerBase
             return StatusCode(500, $"Error exporting hearing data: {ex.Message}");
         }
     }
+    */
 
 }

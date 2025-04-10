@@ -5,9 +5,16 @@
         public int HearingId { get; set; }
         public string HearingCaseTitle { get; set; }
         public string HearingCaseNumber { get; set; }
-        public bool HearingCaseStatus { get; set; } // ✅ Changed from string to bool
-        public string HearingCaseDate { get; set; } = string.Empty; // Format: "yyyy-MM-dd"
-        public string HearingCaseTime { get; set; } = string.Empty; // Format: "HH:mm:ss"
-        public string HearingCaseInputted { get; set; } = string.Empty;
+        public string HearingJudge { get; set; }
+        public string HearingTrialProsecutor { get; set; }
+        public string HearingBranchClerk { get; set; }
+        public string HearingPublicAttorney { get; set; }
+        public string HearingCourtInterpreter { get; set; }
+        public string HearingCourtStenographer { get; set; }
+        public Boolean HearingCaseStatus { get; set; }
+        public DateOnly HearingCaseDate { get; set; }
+        public TimeOnly HearingCaseTime { get; set; } 
+        public string HearingCaseInputted { get; set; }
+        public int HearingNotify { get; set; }
     }
 }
