@@ -49,8 +49,19 @@ namespace DatabaseAPI.Controllers
                 return Unauthorized("Invalid username or password.");
             }
 
-            // Step 3: Fetch the user data
-            string userSql = "SELECT * FROM ManageUsers WHERE user_Name = @UserName";
+            // Step 3: Fetch the user data (with aliasing to match UserDto property names)
+            string userSql = @"
+        SELECT 
+            user_id AS UserId,
+            user_Fname AS FirstName,
+            user_Lname AS LastName,
+            user_Role AS Role,
+            user_Status AS Status,
+            user_Name AS UserName,
+            user_Pass AS Password
+        FROM ManageUsers 
+        WHERE user_Name = @UserName";
+
             var userData = await connection.QueryFirstOrDefaultAsync<UserDto>(userSql, new { UserName = user.UserName });
 
             if (userData == null)
@@ -59,15 +70,16 @@ namespace DatabaseAPI.Controllers
             }
 
             // Step 4: Store user information in the session
-            HttpContext.Session.SetString("UserName", userData.UserName);
-            HttpContext.Session.SetString("UserRole", userData.Role);
+            HttpContext.Session.SetString("UserName", userData.UserName ?? "");
+            HttpContext.Session.SetString("UserRole", userData.Role ?? "");
 
             // Log the login action
-            await Logger.LogLogin(userData.UserName, "User logged in successfully.");
+            await Logger.LogLogin(userData.UserName ?? "Unknown", "User logged in successfully.");
 
             // Step 5: Return user data as JSON
-            return Ok(userData);
+            return Ok(new { message = "Login successfully." });
         }
+
 
 
 
