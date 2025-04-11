@@ -13,13 +13,14 @@ builder.Services.AddSwaggerGen();
 // CORS Configuration: Allow any origin (for testing purposes)
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll",
+    options.AddPolicy("AllowSpecific",
         builder => builder
-            .AllowAnyOrigin() // Allow any origin (important for client like Windows Forms)
-            .AllowAnyMethod() // Allow any HTTP method (GET, POST, etc.)
-            .AllowAnyHeader() // Allow any headers
-            .AllowCredentials()); // Allow credentials like cookies or authorization headers
+            .WithOrigins("https://rotc.bpc-bsis4d.com") // Set specific allowed origin
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials());
 });
+
 
 // Add session management if needed
 builder.Services.AddDistributedMemoryCache(); // In-memory cache for session
