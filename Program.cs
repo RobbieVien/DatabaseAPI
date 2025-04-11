@@ -2,80 +2,47 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System;
-using DatabaseAPI.Utilities;
-using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Initialize the Logger (Make sure Logger.Initialize works correctly, or comment this out to test)
-try
-{
-    Logger.Initialize(builder.Configuration);
-}
-catch (Exception ex)
-{
-    Console.WriteLine("Error initializing logger: " + ex.Message); // Log the error or display it
-}
-
-// Configure services
-builder.Services.AddControllers()
-    .AddJsonOptions(options =>
-    {
-        options.JsonSerializerOptions.Converters.Add(new DateOnlyJsonConverter());
-        options.JsonSerializerOptions.Converters.Add(new TimeOnlyJsonConverter());
-    });
-
+// Initialize services
+builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SchemaFilter<DateOnlySchemaFilter>();
-});
+builder.Services.AddSwaggerGen();
 
-// Configure CORS to allow cross-origin requests
+// CORS Configuration: Allow any origin (for testing purposes)
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll",
-        builder => builder.AllowAnyOrigin()
-                          .AllowAnyMethod()
-                          .AllowAnyHeader()
-                          .AllowCredentials()); // Allow credentials to be passed along with the request
+        builder => builder
+            .AllowAnyOrigin() // Allow any origin (important for client like Windows Forms)
+            .AllowAnyMethod() // Allow any HTTP method (GET, POST, etc.)
+            .AllowAnyHeader() // Allow any headers
+            .AllowCredentials()); // Allow credentials like cookies or authorization headers
 });
 
-// Configure session management (important for keeping user logged in across requests)
-builder.Services.AddDistributedMemoryCache(); // Use in-memory cache for session state
+// Add session management if needed
+builder.Services.AddDistributedMemoryCache(); // In-memory cache for session
 builder.Services.AddSession(options =>
 {
-    options.IdleTimeout = TimeSpan.FromMinutes(30); // Session timeout in minutes
-    options.Cookie.HttpOnly = true; // Prevent JavaScript from accessing session cookies
-    options.Cookie.IsEssential = true; // Mark cookie as essential for the app to function
+    options.IdleTimeout = TimeSpan.FromMinutes(30); // Session timeout
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
 });
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline
+// Enable middleware
 if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// Make sure to add session middleware here
-app.UseCors("AllowAll"); // Enable CORS
-app.UseSession(); // Enable session middleware
-
-// Add routing and authorization middleware
+app.UseCors("AllowAll"); // Enable the CORS policy
+app.UseSession(); // Enable session support
 app.UseRouting();
-app.UseAuthorization(); // Add authorization middleware to allow session access
+app.UseAuthorization();
 
-// Map the controllers to the application
 app.MapControllers();
-
-// Run the application
-try
-{
-    app.Run();
-}
-catch (Exception ex)
-{
-    Console.WriteLine("Error running the app: " + ex.Message); // Log or display the error
-}
+app.Run();
