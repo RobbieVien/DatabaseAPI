@@ -73,8 +73,6 @@ namespace DatabaseAPI.Controllers
             HttpContext.Session.SetString("UserName", userData.UserName ?? "");
             HttpContext.Session.SetString("UserRole", userData.Role ?? "");
 
-
-            Console.WriteLine("Session set: " + HttpContext.Session.GetString("UserName"));
             // Log the login action
             await Logger.LogLogin(userData.UserName ?? "Unknown", "User logged in successfully.");
 
@@ -108,6 +106,20 @@ namespace DatabaseAPI.Controllers
             if (string.IsNullOrEmpty(userName))
             {
                 return Unauthorized(new { message = "User not logged in" });
+            }
+
+            return Ok(new { UserName = userName, UserRole = userRole });
+        }
+
+        [HttpGet("TestSession")]
+        public IActionResult TestSession()
+        {
+            var userName = HttpContext.Session.GetString("UserName");
+            var userRole = HttpContext.Session.GetString("UserRole");
+
+            if (string.IsNullOrEmpty(userName) || string.IsNullOrEmpty(userRole))
+            {
+                return Unauthorized("Session not set or expired.");
             }
 
             return Ok(new { UserName = userName, UserRole = userRole });

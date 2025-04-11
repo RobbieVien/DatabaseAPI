@@ -1,49 +1,55 @@
 ﻿using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using System;
+using DatabaseAPI.Utilities;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Initialize services
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+// Initialize the Logger (This is where Logger.Initialize should be called)
+Logger.Initialize(builder.Configuration);
 
-// CORS Configuration: Allow any origin (for testing purposes)
+//binagoko
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new DateOnlyJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new TimeOnlyJsonConverter());
+    });
+builder.Services.AddEndpointsApiExplorer();
+//etopaisa
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SchemaFilter<DateOnlySchemaFilter>();
+});
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowSpecific",
-        builder => builder
-            .WithOrigins("https://rotc.bpc-bsis4d.com") // Set specific allowed origin
-            .AllowAnyMethod()
-            .AllowAnyHeader()
-            .AllowCredentials());
+    options.AddPolicy("AllowAll",
+        builder => builder.AllowAnyOrigin()
+                          .AllowAnyMethod()
+                          .AllowAnyHeader());
 });
-
-
-// Add session management if needed
-builder.Services.AddDistributedMemoryCache(); // In-memory cache for session
+//session to
+builder.Services.AddDistributedMemoryCache(); // Required for session
 builder.Services.AddSession(options =>
 {
-    options.IdleTimeout = TimeSpan.FromMinutes(30); // Session timeout
-    options.Cookie.HttpOnly = true;
-    options.Cookie.IsEssential = true;
+    options.IdleTimeout = TimeSpan.FromMinutes(30); // Set session timeout
+    options.Cookie.HttpOnly = true; // Make the cookie accessible only via HTTP
+    options.Cookie.IsEssential = true; // Ensure the cookie is always stored
 });
-
 var app = builder.Build();
 
-// Enable middleware
 if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-app.UseCors("AllowAll"); // Enable the CORS policy
-app.UseSession(); // Enable session support
+app.UseSession();
 app.UseRouting();
+app.UseCors("AllowAll");
 app.UseAuthorization();
-
 app.MapControllers();
 app.Run();
