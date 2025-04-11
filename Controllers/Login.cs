@@ -73,6 +73,8 @@ namespace DatabaseAPI.Controllers
             HttpContext.Session.SetString("UserName", userData.UserName ?? "");
             HttpContext.Session.SetString("UserRole", userData.Role ?? "");
 
+
+            Console.WriteLine("Session set: " + HttpContext.Session.GetString("UserName"));
             // Log the login action
             await Logger.LogLogin(userData.UserName ?? "Unknown", "User logged in successfully.");
 
