@@ -81,7 +81,12 @@ namespace DatabaseAPI.Controllers
         }
 
 
-
+        [HttpGet("SecureCheck")]
+        public IActionResult SecureCheck()
+        {
+            var userName = HttpContext.Session.GetString("UserName") ?? "Not logged in";
+            return Ok($"You are: {userName}");
+        }
 
         //Logout to
         [HttpPost("logout")]
