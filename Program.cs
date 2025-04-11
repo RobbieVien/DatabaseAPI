@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System;
@@ -8,8 +7,15 @@ using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Initialize the Logger (This is where Logger.Initialize should be called)
-Logger.Initialize(builder.Configuration);
+// Initialize the Logger (Make sure Logger.Initialize works correctly, or comment this out to test)
+try
+{
+    Logger.Initialize(builder.Configuration);
+}
+catch (Exception ex)
+{
+    Console.WriteLine("Error initializing logger: " + ex.Message); // Log the error or display it
+}
 
 // Configure services
 builder.Services.AddControllers()
@@ -20,8 +26,6 @@ builder.Services.AddControllers()
     });
 
 builder.Services.AddEndpointsApiExplorer();
-
-// Setup Swagger (optional for testing API endpoints)
 builder.Services.AddSwaggerGen(c =>
 {
     c.SchemaFilter<DateOnlySchemaFilter>();
@@ -58,10 +62,20 @@ if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
 // Make sure to add session middleware here
 app.UseCors("AllowAll"); // Enable CORS
 app.UseSession(); // Enable session middleware
+
+// Add routing and authorization middleware
 app.UseRouting();
-app.UseAuthorization();
+app.UseAuthorization(); // Add authorization middleware to allow session access
 
 // Map the controllers to the application
 app.MapControllers();
 
-app.Run();
+// Run the application
+try
+{
+    app.Run();
+}
+catch (Exception ex)
+{
+    Console.WriteLine("Error running the app: " + ex.Message); // Log or display the error
+}
