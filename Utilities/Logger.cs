@@ -72,5 +72,37 @@ namespace DatabaseAPI.Utilities
             }
         }
 
+        public static async Task<int> LogActionAdd(HttpContext httpContext, string action, string tableName, string details = "")
+        {
+            if (string.IsNullOrEmpty(_connectionString))
+                throw new Exception("Logger is not initialized with a connection string.");
+
+            var userName = httpContext.Session.GetString("UserName") ?? "Unknown";
+
+            using (var connection = new MySqlConnection(_connectionString))
+            {
+                await connection.OpenAsync();
+                await connection.ExecuteAsync("SET time_zone = '+08:00';");
+
+                var sql = "INSERT INTO Logs (Action, TableName,  UserName, Details, Timestamp) VALUES (@Action, @TableName,  @UserName, @Details, NOW())";
+                var result = await connection.ExecuteAsync(sql, new
+                {
+                    Action = action,
+                    TableName = tableName,
+                    UserName = userName,
+                    Details = details
+                });
+
+                // Call cleanup in a separate connection to prevent packet issues
+                using (var cleanupConnection = new MySqlConnection(_connectionString))
+                {
+                    await cleanupConnection.OpenAsync();
+                    await cleanupConnection.ExecuteAsync("CALL CleanupOldLogs();");
+                }
+
+                return result;
+            }
+        }
+
     }
 }

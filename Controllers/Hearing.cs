@@ -102,7 +102,7 @@ public class HearingController : ControllerBase
                 CaseInputted = hearingCaseInputted // Use the auto-generated time for HearingCaseInputted
             });
 
-            await Logger.LogAction(HttpContext, $"Hearing {hearing.HearingCaseTitle} has been added.", "Hearing", 0);
+            await Logger.LogActionAdd(HttpContext, $"Hearing {hearing.HearingCaseTitle} has been added.", "Hearing");
             return Ok(new { message = "Hearing added successfully." });
         }
         catch (Exception ex)
@@ -455,21 +455,61 @@ public class HearingController : ControllerBase
 
 
 
-
-
+    //eto sa counting Pa test nga neto deneey, kung kaya mag combine yung tatlong HTTPGET CountHearings, FilterHearing, FilterDateHearings
     [HttpGet("CountHearings")]
-    public async Task<IActionResult> CountHearings()
+    public async Task<IActionResult> CountHearings([FromQuery] string filter)
     {
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
 
-        string query = "SELECT COUNT(*) FROM Hearing";
-        using var cmd = new MySqlCommand(query, con);
+        string filterLower = filter?.Trim().ToLower();
+        string query;
+
+        switch (filterLower)
+        {
+            case "today":
+                query = @"
+                SELECT COUNT(*) 
+                FROM Hearing 
+                WHERE DATE(CONVERT_TZ(hearing_Case_Date, '+00:00', '+08:00')) = DATE(CONVERT_TZ(NOW(), '+00:00', '+08:00'))
+                  AND hearing_case_status = 0";
+                break;
+
+            case "tomorrow":
+            case "next day":
+                query = @"
+                SELECT COUNT(*) 
+                FROM Hearing 
+                WHERE DATE(CONVERT_TZ(hearing_Case_Date, '+00:00', '+08:00')) = DATE(DATE_ADD(CONVERT_TZ(NOW(), '+00:00', '+08:00'), INTERVAL 1 DAY))
+                  AND hearing_case_status = 0";
+                break;
+
+            case "this week":
+                query = @"
+                SELECT COUNT(*) 
+                FROM Hearing 
+                WHERE YEARWEEK(CONVERT_TZ(hearing_Case_Date, '+00:00', '+08:00'), 1) = YEARWEEK(CONVERT_TZ(NOW(), '+00:00', '+08:00'), 1)
+                  AND hearing_case_status = 0";
+                break;
+
+            case "next week":
+                query = @"
+                SELECT COUNT(*) 
+                FROM Hearing 
+                WHERE YEARWEEK(CONVERT_TZ(hearing_Case_Date, '+00:00', '+08:00'), 1) = YEARWEEK(CONVERT_TZ(NOW(), '+00:00', '+08:00'), 1) + 1
+                  AND hearing_case_status = 0";
+                break;
+
+            default:
+                query = "SELECT COUNT(*) FROM Hearing WHERE hearing_case_status = 0";
+                break;
+        }
 
         try
         {
-            int userCount = Convert.ToInt32(await cmd.ExecuteScalarAsync());
-            return Ok(userCount);
+            using var cmd = new MySqlCommand(query, con);
+            int count = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+            return Ok(count);
         }
         catch (Exception ex)
         {
@@ -477,32 +517,51 @@ public class HearingController : ControllerBase
         }
     }
 
+
+
+    //sa filter to sa dashboard view details
     [HttpGet("FilterHearings")]
     public async Task<IActionResult> FilterHearings(string All)
     {
         string query;
 
-        switch (All)
+        // Construct the SQL query based on the selected filter.
+        switch (All.ToLower())
         {
-            case "Today":
-                query = @"SELECT hearing_Id AS HearingId, hearing_Case_Title AS HearingCaseTitle, 
-                         hearing_Case_Num AS HearingCaseNumber, hearing_Case_Date AS HearingCaseDate, 
-                         TIME_FORMAT(hearing_Case_Time, '%H:%i:%s') AS HearingCaseTime, hearing_case_status AS HearingCaseStatus
-                  FROM Hearing 
-                  WHERE hearing_Case_Date = CURDATE()";
+            case "today":
+                query = @"SELECT hearing_Case_Title AS HearingCaseTitle, 
+                             hearing_Case_Num AS HearingCaseNumber, 
+                             hearing_Case_Date AS HearingCaseDate, 
+                             hearing_Case_Time AS HearingCaseTime, 
+                             hearing_case_status AS HearingCaseStatus
+                      FROM Hearing 
+                      WHERE DATE(hearing_Case_Date) = CURDATE() AND hearing_case_status != 1";
                 break;
-            case "This Week":
-                query = @"SELECT hearing_Id AS HearingId, hearing_Case_Title AS HearingCaseTitle, 
-                         hearing_Case_Num AS HearingCaseNumber, hearing_Case_Date AS HearingCaseDate, 
-                         TIME_FORMAT(hearing_Case_Time, '%H:%i:%s') AS HearingCaseTime, hearing_case_status AS HearingCaseStatus
-                  FROM Hearing 
-                  WHERE YEARWEEK(hearing_Case_Date, 1) = YEARWEEK(CURDATE(), 1)";
+            case "this week":
+                query = @"SELECT hearing_Case_Title AS HearingCaseTitle, 
+                             hearing_Case_Num AS HearingCaseNumber, 
+                             hearing_Case_Date AS HearingCaseDate, 
+                             hearing_Case_Time AS HearingCaseTime, 
+                             hearing_case_status AS HearingCaseStatus
+                      FROM Hearing 
+                      WHERE YEARWEEK(hearing_Case_Date, 1) = YEARWEEK(CURDATE(), 1) AND hearing_case_status != 1";
+                break;
+            case "next week":
+                query = @"SELECT hearing_Case_Title AS HearingCaseTitle, 
+                             hearing_Case_Num AS HearingCaseNumber, 
+                             hearing_Case_Date AS HearingCaseDate, 
+                             hearing_Case_Time AS HearingCaseTime, 
+                             hearing_case_status AS HearingCaseStatus
+                      FROM Hearing 
+                      WHERE YEARWEEK(hearing_Case_Date, 1) = YEARWEEK(CURDATE(), 1) + 1 AND hearing_case_status != 1";
                 break;
             default:
-                query = @"SELECT hearing_Id AS HearingId, hearing_Case_Title AS HearingCaseTitle, 
-                         hearing_Case_Num AS HearingCaseNumber, hearing_Case_Date AS HearingCaseDate, 
-                         TIME_FORMAT(hearing_Case_Time, '%H:%i:%s') AS HearingCaseTime, hearing_case_status AS HearingCaseStatus
-                  FROM Hearing";
+                query = @"SELECT hearing_Case_Title AS HearingCaseTitle, 
+                             hearing_Case_Num AS HearingCaseNumber, 
+                             hearing_Case_Date AS HearingCaseDate, 
+                             hearing_Case_Time AS HearingCaseTime, 
+                             hearing_case_status AS HearingCaseStatus
+                      FROM Hearing WHERE hearing_case_status != 1";
                 break;
         }
 
@@ -510,8 +569,44 @@ public class HearingController : ControllerBase
         {
             using (var connection = new MySqlConnection(_connectionString))
             {
-                var hearings = await connection.QueryAsync<Hearingdto>(query);
-                return Ok(hearings);
+                var hearings = await connection.QueryAsync(query);
+                var filteredHearings = hearings.Select(item =>
+                {
+                    var dict = (IDictionary<string, object>)item;
+
+                    // Manually parse Date and Time from database
+                    var hearingCaseDateValue = dict["HearingCaseDate"];
+                    var hearingCaseTimeValue = dict["HearingCaseTime"];
+
+                    // Initialize the nullable DateOnly and TimeOnly
+                    DateOnly? hearingCaseDate = null;
+                    TimeOnly? hearingCaseTime = null;
+
+                    // Parse the DateTime to DateOnly and TimeOnly
+                    if (hearingCaseDateValue != DBNull.Value && hearingCaseDateValue is DateTime)
+                    {
+                        var dateTimeValue = (DateTime)hearingCaseDateValue;
+                        hearingCaseDate = DateOnly.FromDateTime(dateTimeValue);
+                    }
+
+                    if (hearingCaseTimeValue != DBNull.Value && hearingCaseTimeValue is TimeSpan)
+                    {
+                        var timeSpanValue = (TimeSpan)hearingCaseTimeValue;
+                        hearingCaseTime = TimeOnly.FromTimeSpan(timeSpanValue);
+                    }
+
+                    // Return the result object
+                    return new
+                    {
+                        HearingCaseTitle = dict["HearingCaseTitle"]?.ToString(),
+                        HearingCaseNumber = dict["HearingCaseNumber"]?.ToString(),
+                        HearingCaseDate = hearingCaseDate, // nullable DateOnly
+                        HearingCaseTime = hearingCaseTime, // nullable TimeOnly
+                        HearingCaseStatus = dict["HearingCaseStatus"] != null && Convert.ToInt32(dict["HearingCaseStatus"]) == 1 ? "Finished" : "Pending"
+                    };
+                });
+
+                return Ok(filteredHearings);
             }
         }
         catch (Exception ex)
@@ -519,6 +614,66 @@ public class HearingController : ControllerBase
             return StatusCode(500, new { message = $"Error filtering hearings: {ex.Message}" });
         }
     }
+
+
+
+
+
+
+
+
+    [HttpGet("FilterHearingsByDate")]
+    public async Task<IActionResult> FilterHearingsByDate([FromQuery] string date)
+    {
+        // Try to parse the incoming date string to a DateTime object
+        if (!DateTime.TryParse(date, out var parsedDate))
+        {
+            return BadRequest("Invalid date format. Use yyyy-MM-dd.");
+        }
+
+        // SQL query to filter by date and ensure it handles time zone conversion correctly
+        string query = @"
+    SELECT 
+        hearing_Case_Title AS HearingCaseTitle, 
+        hearing_Case_Num AS HearingCaseNumber, 
+        hearing_Case_Date AS HearingCaseDate, 
+        hearing_Case_Time AS HearingCaseTime, 
+        hearing_case_status AS HearingCaseStatus
+    FROM Hearing
+    WHERE DATE(CONVERT_TZ(hearing_Case_Date, '+00:00', '+08:00')) = @TargetDate
+    AND hearing_case_status = 0
+    ORDER BY hearing_Case_Date ASC, hearing_Case_Time ASC";
+
+        try
+        {
+            using var connection = new MySqlConnection(_connectionString);
+
+            // Query the database and map the results to your DTO
+            var results = await connection.QueryAsync(query, new { TargetDate = parsedDate.Date });
+
+            // Process the results, checking for nulls and formatting correctly
+            var processed = results.Select(h => new
+            {
+                HearingCaseTitle = h.HearingCaseTitle,
+                HearingCaseNumber = h.HearingCaseNumber,
+                HearingCaseDate = h.HearingCaseDate != null ? ((DateTime)h.HearingCaseDate).ToString("yyyy-MM-dd") : null,
+                HearingCaseTime = h.HearingCaseTime != null ? ((TimeSpan)h.HearingCaseTime).ToString(@"hh\:mm\:ss") : null,
+                // If the status is false, it will be "Pending", if true, it will be "Finished"
+                HearingCaseStatus = h.HearingCaseStatus ? "Finished" : "Pending"
+            });
+
+            return Ok(processed);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = $"Error filtering hearings by date: {ex.Message}" });
+        }
+    }
+ 
+
+
+
+
 
     //This is for comboBox in Hearing 
     [HttpGet("GetCaseTitle")]
@@ -572,83 +727,60 @@ public class HearingController : ControllerBase
             });
         }
     }
-    /*
+    // sa schedule export
     [HttpGet("export-hearing")]
     public async Task<IActionResult> ExportHearingReport()
     {
         try
         {
-            string query = @" 
-                                     SELECT 
-                hearing_Id AS HearingId, 
-                hearing_Case_Title AS HearingCaseTitle, 
-                hearing_Case_Num AS HearingCaseNumber, 
-                DATE_FORMAT(hearing_Case_Date, '%Y-%m-%d') AS HearingCaseDate, 
-                TIME_FORMAT(hearing_Case_Time, '%H:%i:%s') AS HearingCaseTime, 
-                DATE_FORMAT(hearing_Case_Inputted, '%Y-%m-%d %H:%i:%s') AS HearingCaseInputted, 
-                hearing_case_status AS HearingCaseStatus,
-                CASE 
-                    WHEN CONCAT(hearing_Case_Date, ' ', hearing_Case_Time) >= CONVERT_TZ(NOW(), 'UTC', 'Asia/Manila') THEN 0
-                    ELSE 1
-                END AS is_past
-            FROM Hearing
-            ORDER BY is_past ASC, 
-                     CASE WHEN is_past = 0 THEN hearing_Case_Date END ASC, 
-                     CASE WHEN is_past = 0 THEN hearing_Case_Time END ASC,
-                     CASE WHEN is_past = 1 THEN hearing_Case_Date END DESC, 
-                     CASE WHEN is_past = 1 THEN hearing_Case_Time END DESC";
+            // Use Philippine time zone
+            TimeZoneInfo philippineTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila");
+            DateTime philippineNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, philippineTimeZone);
 
+            string query = @"
+        SELECT 
+            hearing_Case_Title AS HearingCaseTitle, 
+            hearing_Case_Num AS HearingCaseNumber, 
+            hearing_Judge AS HearingJudge,
+            hearing_Trial_Prosecutor AS HearingTrialProsecutor,
+            hearing_Branch_Clerk AS HearingBranchClerk,
+            hearing_Public_Attorney AS HearingPublicAttorney,
+            hearing_Court_Interpreter AS HearingCourtInterpreter,
+            hearing_Court_Stenographer AS HearingCourtStenographer,
+            hearing_case_status AS HearingCaseStatus,
+            hearing_Case_Date AS HearingCaseDate,  -- Returning as DateTime
+            hearing_Case_Time AS HearingCaseTime  -- Returning as TimeOnly (TimeSpan in C#)
+        FROM Hearing
+        ORDER BY hearing_Case_Date ASC, hearing_Case_Time ASC";
 
             using var connection = new MySqlConnection(_connectionString);
-
-            // After your database connection but before mapping to DTO
-            var rawData = await connection.QueryAsync(query);
-            Console.WriteLine("Raw database results:");
-            foreach (var item in rawData)
-            {
-                // Cast to IDictionary to safely access the properties
-                var rowDict = item as IDictionary<string, object>;
-                if (rowDict != null)
-                {
-                    Console.WriteLine("Row data:");
-                    foreach (var kvp in rowDict)
-                    {
-                        Console.WriteLine($"  {kvp.Key}: {kvp.Value ?? "null"}");
-                    }
-                }
-                else
-                {
-                    Console.WriteLine("Could not convert row to dictionary");
-                }
-            }
-            var hearingData = (await connection.QueryAsync<Hearingdto>(query)).ToList();
-
-            Console.WriteLine($"Retrieved {hearingData.Count} hearing records.");
+            var hearingData = (await connection.QueryAsync<Hearingexportdto>(query)).ToList();
 
             if (!hearingData.Any())
             {
                 return NotFound("No hearing records found.");
             }
 
-            foreach (var record in hearingData)
-            {
-                Console.WriteLine($"Case Title: {record.HearingCaseTitle}, Case Number: {record.HearingCaseNumber}, " +
-                                  $"Date: {record.HearingCaseDate}, Time: {record.HearingCaseTime}, " +
-                                  $"Status: {record.HearingCaseStatus}, Inputted: {record.HearingCaseInputted}");
-            }
-
+            // Create Excel workbook
             using var workbook = new XLWorkbook();
             var worksheet = workbook.Worksheets.Add("Hearing Schedule");
-            worksheet.Cell("A1").Value = "HEARING SCHEDULE REPORT";
-            worksheet.Range("A1:F1").Merge().Style.Font.SetBold(true).Font.SetFontSize(14).Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
-            worksheet.Cell("A2").Value = $"Date Exported: {DateTime.Now:MM/dd/yyyy hh:mm tt}";
-            worksheet.Range("A2:F2").Merge().Style.Font.SetItalic(true).Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
 
-            var headers = new[] { "Case Title", "Case Number", "Hearing Date", "Hearing Time", "Status", "Date Inputted" };
+            // Header styling
+            worksheet.Cell("A1").Value = "HEARING SCHEDULE REPORT";
+            worksheet.Range("A1:F1").Merge().Style.Font.SetBold(true).Font.SetFontSize(14)
+                      .Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+
+            worksheet.Cell("A2").Value = $"Date Exported: {philippineNow:MM/dd/yyyy hh:mm tt}";
+            worksheet.Range("A2:F2").Merge().Style.Font.SetItalic(true)
+                      .Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+
+            var headers = new[] { "Case Title", "Case Number", "Judge", "Trial Prosecutor", "Branch Clerk", "Public Attorney", "Court Interpreter", "Court Stenographer", "Status", "Hearing Date", "Hearing Time" };
             for (int i = 0; i < headers.Length; i++)
             {
                 worksheet.Cell(4, i + 1).Value = headers[i];
-                worksheet.Cell(4, i + 1).Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.LightGray).Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+                worksheet.Cell(4, i + 1).Style.Font.SetBold(true)
+                     .Fill.SetBackgroundColor(XLColor.LightGray)
+                     .Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
             }
 
             int row = 5;
@@ -656,10 +788,15 @@ public class HearingController : ControllerBase
             {
                 worksheet.Cell(row, 1).Value = record.HearingCaseTitle ?? "N/A";
                 worksheet.Cell(row, 2).Value = record.HearingCaseNumber ?? "N/A";
-                worksheet.Cell(row, 3).Value = !string.IsNullOrEmpty(record.HearingCaseDate) ? record.HearingCaseDate : "N/A";
-                worksheet.Cell(row, 4).Value = !string.IsNullOrEmpty(record.HearingCaseTime) ? record.HearingCaseTime : "N/A";
-                worksheet.Cell(row, 5).Value = record.HearingCaseStatus ? "Completed" : "Pending";
-                worksheet.Cell(row, 6).Value = !string.IsNullOrEmpty(record.HearingCaseInputted) ? record.HearingCaseInputted : "N/A";
+                worksheet.Cell(row, 3).Value = record.HearingJudge ?? "N/A";
+                worksheet.Cell(row, 4).Value = record.HearingTrialProsecutor ?? "N/A";
+                worksheet.Cell(row, 5).Value = record.HearingBranchClerk ?? "N/A";
+                worksheet.Cell(row, 6).Value = record.HearingPublicAttorney ?? "N/A";
+                worksheet.Cell(row, 7).Value = record.HearingCourtInterpreter ?? "N/A";
+                worksheet.Cell(row, 8).Value = record.HearingCourtStenographer ?? "N/A";
+                worksheet.Cell(row, 9).Value = record.HearingCaseStatus ? "Completed" : "Pending";
+                worksheet.Cell(row, 10).Value = record.HearingCaseDate.ToString("yyyy-MM-dd");  // Format DateTime properly
+                worksheet.Cell(row, 11).Value = record.HearingCaseTime.ToString(@"hh\:mm\:ss");  // Format TimeSpan properly
                 row++;
             }
 
@@ -673,7 +810,10 @@ public class HearingController : ControllerBase
             using var stream = new MemoryStream();
             workbook.SaveAs(stream);
             stream.Position = 0;
-            return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"Hearing_Report_{DateTime.Now:yyyyMMdd}.xlsx");
+
+            return File(stream.ToArray(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"Hearing_Report_{DateTime.Now:yyyyMMdd}.xlsx");
         }
         catch (Exception ex)
         {
@@ -681,6 +821,8 @@ public class HearingController : ControllerBase
             return StatusCode(500, $"Error exporting hearing data: {ex.Message}");
         }
     }
-    */
+
+
+
 
 }

@@ -27,6 +27,25 @@ namespace DatabaseAPI.Controllers
             var logs = await connection.QueryAsync<LogsDto>(sql);
             return Ok(logs);
         }
+        [HttpGet("GetLogsAdd")]
+        public async Task<ActionResult<IEnumerable<LogsAddDto>>> GetLogsAdd()
+        {
+            using var connection = new MySqlConnection(_connectionString);
+
+            var sql = @"
+        SELECT 
+            Action, 
+            TableName, 
+            UserName, 
+            Timestamp, 
+            Details 
+        FROM Logs 
+        ORDER BY Timestamp DESC";
+
+            var logs = await connection.QueryAsync<LogsAddDto>(sql);
+            return Ok(logs);
+        }
+
 
 
         [HttpGet("GetLogsHearing")]

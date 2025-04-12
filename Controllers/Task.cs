@@ -119,11 +119,10 @@ public class TaskController : ControllerBase
                 }
 
                 // Log the action
-                await Logger.LogAction(HttpContext,
+                await Logger.LogActionAdd(HttpContext,
                     action: "INSERT",
                     tableName: "Tasks",
-                    recordId: 0,
-                    details: $"Task '{tasks.ScheduleTaskTitle}' added successfully with Status: {defaultStatusValue}."
+                    details: $"Task '{tasks.ScheduleTaskTitle}' added successfully."
                 );
 
                 return Ok(new { message = "Task added successfully." });

@@ -74,7 +74,6 @@ namespace DatabaseAPI.Controllers
             HttpContext.Session.SetString("UserRole", userData.Role ?? "");
 
             // Log the login action
-            await Logger.LogLogin(userData.UserName ?? "Unknown", "User logged in successfully.");
 
             // Step 5: Return user data as JSON
             return Ok(new { message = "Login successfully." });
