@@ -59,25 +59,45 @@ public class TaskController : ControllerBase
             await con.OpenAsync();
             try
             {
-                // Check for existing task
+                // Find user ID based on the provided username
+                string userQuery = @"SELECT user_Id, user_Name FROM ManageUsers 
+                               WHERE user_Name = @UserName";
+
+                var userResult = await con.QueryFirstOrDefaultAsync<dynamic>(
+                    userQuery,
+                    new { UserName = tasks.ScheduleUser }
+                );
+
+                if (userResult == null)
+                {
+                    return BadRequest("User not found. Please provide a valid username.");
+                }
+
+                int userId = userResult.user_Id;
+                string userName = userResult.user_Name;
+
+                // Check if a task with the same title, date, and user already exists
                 string checkQuery = @"SELECT COUNT(*) FROM Tasks 
-                        WHERE sched_taskTitle = @TaskTitle 
-                        AND DATE(sched_date) = DATE(@Date)";
+                                WHERE sched_taskTitle = @TaskTitle 
+                                AND DATE(sched_date) = DATE(@Date)
+                                AND user_Id = @UserId";
+
                 var existingCount = await con.ExecuteScalarAsync<int>(
                     checkQuery,
                     new
                     {
                         TaskTitle = tasks.ScheduleTaskTitle.Trim(),
-                        Date = tasks.ScheduleDate
+                        Date = tasks.ScheduleDate,
+                        UserId = userId
                     }
                 );
 
                 if (existingCount > 0)
                 {
-                    return Conflict("A task with the same title and date already exists.");
+                    return Conflict($"A task with the title '{tasks.ScheduleTaskTitle}' already exists for this user on the selected date.");
                 }
 
-                // Insert new task
+                // Insert new task with user ID
                 string insertQuery = @"INSERT INTO Tasks (
                 sched_taskTitle,
                 sched_user,
@@ -85,7 +105,8 @@ public class TaskController : ControllerBase
                 sched_date, 
                 sched_inputted, 
                 sched_status,
-                sched_notify
+                sched_notify,
+                user_Id
             ) VALUES (
                 @TaskTitle,
                 @TaskUser,
@@ -93,23 +114,25 @@ public class TaskController : ControllerBase
                 @Date, 
                 @InputtedTime, 
                 @Status,
-                @Notify
+                @Notify,
+                @UserId
             )";
 
-                // Ensure that tasks are created as "Pending" (status 0) by default
-                const int defaultStatusValue = 0; // Always create tasks as pending
+                // Ensure that tasks are created as "Pending" (false) by default
+                const bool defaultStatusValue = false; // Always create tasks as pending
 
                 int rowsAffected = await con.ExecuteAsync(
                     insertQuery,
                     new
                     {
                         TaskTitle = tasks.ScheduleTaskTitle.Trim(),
-                        TaskUser = tasks.ScheduleUser,
+                        TaskUser = userName,   // Store the username for display purposes
                         TaskDescription = tasks.ScheduleTaskDescription,
                         Date = tasks.ScheduleDate,
                         InputtedTime = philippineTime,
-                        Status = defaultStatusValue,  // Force status to be 0
-                        Notify = tasks.ScheduleNotify
+                        Status = defaultStatusValue,
+                        Notify = tasks.ScheduleNotify,
+                        UserId = userId        // Store the user ID for relationships
                     }
                 );
 
@@ -122,10 +145,10 @@ public class TaskController : ControllerBase
                 await Logger.LogActionAdd(HttpContext,
                     action: "INSERT",
                     tableName: "Tasks",
-                    details: $"Task '{tasks.ScheduleTaskTitle}' added successfully."
+                    details: $"Task '{tasks.ScheduleTaskTitle}' added successfully for user '{userName}' (ID: {userId})."
                 );
 
-                return Ok(new { message = "Task added successfully." });
+                return Ok(new { message = "Task added successfully.", userId = userId, userName = userName });
             }
             catch (Exception ex)
             {
@@ -133,31 +156,24 @@ public class TaskController : ControllerBase
             }
         }
     }
+
+
     [HttpPut("UpdateTask/{scheduleId}")]
     public async Task<IActionResult> UpdateTask(int scheduleId, [FromBody] Tasksdto task)
     {
-        const string updateQuery = @"
-UPDATE Tasks 
-SET 
-    sched_taskTitle = @ScheduleTaskTitle,
-    sched_user = @ScheduleUser,
-    sched_taskDescription = @ScheduleTaskDescription,
-    sched_date = @ScheduleDate,
-    sched_notify = @ScheduleNotify,
-    sched_status = @ScheduleStatus
-WHERE sched_Id = @ScheduleId";
-
         try
         {
             using (var connection = new MySqlConnection(_connectionString))
             {
                 await connection.OpenAsync();
 
+                // Get Philippine time (UTC+8)
                 DateTime philippineTime = TimeZoneInfo.ConvertTimeFromUtc(
                     DateTime.UtcNow,
                     TimeZoneInfo.FindSystemTimeZoneById("Singapore Standard Time")
                 );
 
+                // Validate inputs
                 if (task.ScheduleDate.Date < philippineTime.Date)
                 {
                     return BadRequest("Cannot update a task with a past date. Please choose a future date.");
@@ -179,7 +195,8 @@ WHERE sched_Id = @ScheduleId";
                     return BadRequest("Notification time cannot exceed 30 days.");
                 }
 
-                var checkQuery = "SELECT sched_Id FROM Tasks WHERE sched_Id = @ScheduleId";
+                // Check if task exists
+                string checkQuery = "SELECT sched_Id FROM Tasks WHERE sched_Id = @ScheduleId";
                 var existingTask = await connection.QueryFirstOrDefaultAsync<int>(checkQuery, new { ScheduleId = scheduleId });
 
                 if (existingTask == 0)
@@ -187,17 +204,19 @@ WHERE sched_Id = @ScheduleId";
                     return NotFound($"Task with ID {scheduleId} not found");
                 }
 
+                // Get original task data for logging changes
                 var originalTask = await connection.QueryFirstOrDefaultAsync<Tasksdto>(@"
-                SELECT 
-                    sched_Id AS ScheduleId,
-                    sched_taskTitle AS ScheduleTaskTitle,
-                    sched_user AS ScheduleUser,
-                    sched_taskDescription AS ScheduleTaskDescription,
-                    sched_date AS ScheduleDate,
-                    sched_notify AS ScheduleNotify,
-                    sched_status AS ScheduleStatus
-                FROM Tasks 
-                WHERE sched_Id = @ScheduleId",
+            SELECT 
+                sched_Id AS ScheduleId,
+                sched_taskTitle AS ScheduleTaskTitle,
+                sched_user AS ScheduleUser,
+                sched_taskDescription AS ScheduleTaskDescription,
+                sched_date AS ScheduleDate,
+                sched_notify AS ScheduleNotify,
+                sched_status AS ScheduleStatus,
+                user_Id AS UserId
+            FROM Tasks 
+            WHERE sched_Id = @ScheduleId",
                     new { ScheduleId = scheduleId });
 
                 if (originalTask == null)
@@ -211,19 +230,75 @@ WHERE sched_Id = @ScheduleId";
                     return NotFound($"Task {scheduleId} not found");
                 }
 
+                // Find user ID based on the provided username
+                string userQuery = @"SELECT user_Id, user_Name FROM ManageUsers 
+                               WHERE user_Name = @UserName";
+
+                var userResult = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                    userQuery,
+                    new { UserName = task.ScheduleUser }
+                );
+
+                if (userResult == null)
+                {
+                    return BadRequest("User not found. Please provide a valid username.");
+                }
+
+                int userId = userResult.user_Id;
+                string userName = userResult.user_Name;
+
+                // Check if a task with the same title, date, and user already exists (excluding the current task)
+                string duplicateQuery = @"SELECT COUNT(*) FROM Tasks 
+                                    WHERE sched_taskTitle = @TaskTitle 
+                                    AND DATE(sched_date) = DATE(@Date)
+                                    AND user_Id = @UserId
+                                    AND sched_Id != @ScheduleId";
+
+                var duplicateCount = await connection.ExecuteScalarAsync<int>(
+                    duplicateQuery,
+                    new
+                    {
+                        TaskTitle = task.ScheduleTaskTitle.Trim(),
+                        Date = task.ScheduleDate,
+                        UserId = userId,
+                        ScheduleId = scheduleId
+                    }
+                );
+
+                if (duplicateCount > 0)
+                {
+                    return Conflict($"A task with the title '{task.ScheduleTaskTitle}' already exists for this user on the selected date.");
+                }
+
+                // Convert boolean status to integer for database
                 int statusValue = task.ScheduleStatus ? 1 : 0;
+
+                // Updated query to include user_Id
+                const string updateQuery = @"
+            UPDATE Tasks 
+            SET 
+                sched_taskTitle = @ScheduleTaskTitle,
+                sched_user = @ScheduleUser,
+                sched_taskDescription = @ScheduleTaskDescription,
+                sched_date = @ScheduleDate,
+                sched_notify = @ScheduleNotify,
+                sched_status = @ScheduleStatus,
+                user_Id = @UserId
+            WHERE sched_Id = @ScheduleId";
 
                 await connection.ExecuteAsync(updateQuery, new
                 {
                     task.ScheduleTaskTitle,
-                    task.ScheduleUser,
+                    ScheduleUser = userName,  // Use the verified username
                     task.ScheduleTaskDescription,
                     task.ScheduleDate,
                     task.ScheduleNotify,
-                    ScheduleStatus = statusValue, // ✅ Fixed name
+                    ScheduleStatus = statusValue,
+                    UserId = userId,         // Add the user ID
                     ScheduleId = scheduleId
                 });
 
+                // Track changes for logging
                 List<string> changes = new List<string>();
 
                 if (!string.Equals(originalTask.ScheduleTaskTitle, task.ScheduleTaskTitle, StringComparison.Ordinal))
@@ -231,9 +306,9 @@ WHERE sched_Id = @ScheduleId";
                     changes.Add($"Task Title: \"{originalTask.ScheduleTaskTitle ?? "(empty)"}\" → \"{task.ScheduleTaskTitle ?? "(empty)"}\"");
                 }
 
-                if (!string.Equals(originalTask.ScheduleUser, task.ScheduleUser, StringComparison.Ordinal))
+                if (!string.Equals(originalTask.ScheduleUser, userName, StringComparison.Ordinal))
                 {
-                    changes.Add($"User: \"{originalTask.ScheduleUser ?? "(empty)"}\" → \"{task.ScheduleUser ?? "(empty)"}\"");
+                    changes.Add($"User: \"{originalTask.ScheduleUser ?? "(empty)"}\" → \"{userName ?? "(empty)"}\"");
                 }
 
                 if (!string.Equals(originalTask.ScheduleTaskDescription, task.ScheduleTaskDescription, StringComparison.Ordinal))
@@ -256,6 +331,12 @@ WHERE sched_Id = @ScheduleId";
                     changes.Add($"Status: \"{(originalTask.ScheduleStatus ? "Finished" : "Pending")}\" → \"{(task.ScheduleStatus ? "Finished" : "Pending")}\"");
                 }
 
+                // Add user ID change tracking
+                if (originalTask.UserId != userId)
+                {
+                    changes.Add($"User ID: \"{originalTask.UserId}\" → \"{userId}\"");
+                }
+
                 if (changes.Count > 0)
                 {
                     await Logger.LogAction(HttpContext,
@@ -266,7 +347,13 @@ WHERE sched_Id = @ScheduleId";
                     );
                 }
 
-                return Ok(new { Message = $"Task entry with ID {scheduleId} updated successfully.", Changes = changes });
+                return Ok(new
+                {
+                    Message = $"Task entry with ID {scheduleId} updated successfully.",
+                    Changes = changes,
+                    UserId = userId,
+                    UserName = userName
+                });
             }
         }
         catch (Exception ex)
@@ -278,7 +365,6 @@ WHERE sched_Id = @ScheduleId";
             });
         }
     }
-
 
 
 

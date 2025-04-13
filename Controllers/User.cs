@@ -22,7 +22,7 @@ public class UserController : ControllerBase
     }
 
     // LogAction method (moved from LogsController)
-   
+
 
     // GetLogs method (optional, if you want to retrieve logs in UserController)
 
@@ -54,24 +54,27 @@ public class UserController : ControllerBase
             return BadRequest("Invalid user data.");
         }
 
-        // Rest of your existing code
+        // Normalize and trim username
+        string normalizedUsername = user.UserName.Trim().ToLowerInvariant();
+
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
 
-        // Check if username already exists
-        string checkQuery = "SELECT COUNT(*) FROM ManageUsers WHERE user_Name = @UserName";
-        int userCount = await con.ExecuteScalarAsync<int>(checkQuery, new { UserName = user.UserName });
+        // Case-insensitive, trimmed check for existing username
+        string checkQuery = "SELECT COUNT(*) FROM ManageUsers WHERE LOWER(TRIM(user_Name)) = @UserName";
+        int userCount = await con.ExecuteScalarAsync<int>(checkQuery, new { UserName = normalizedUsername });
+
         if (userCount > 0)
         {
             return Conflict("Username already exists.");
         }
 
-        // Hash the password correctly
+        // Hash the password
         string hashedPassword = PasswordHasher.HashPassword(user.Password);
 
         string insertQuery = @"
-        INSERT INTO ManageUsers (user_Fname, user_Lname, user_Role, user_Status, user_Name, user_Pass)
-        VALUES (@FirstName, @LastName, @Role, @Status, @UserName, @Password)";
+    INSERT INTO ManageUsers (user_Fname, user_Lname, user_Role, user_Status, user_Name, user_Pass)
+    VALUES (@FirstName, @LastName, @Role, @Status, @UserName, @Password)";
 
         int rowsAffected = await con.ExecuteAsync(insertQuery, new
         {
@@ -79,7 +82,7 @@ public class UserController : ControllerBase
             LastName = user.LastName,
             Role = user.Role,
             Status = user.Status,
-            UserName = user.UserName,
+            UserName = user.UserName.Trim(), // Use trimmed version for DB
             Password = hashedPassword
         });
 
@@ -91,11 +94,12 @@ public class UserController : ControllerBase
             // Log the action
             await Logger.LogAction(HttpContext, "Add", "ManageUsers", newUserId);
 
-            return Ok(new { message = "User added successfully." }); ;
+            return Ok(new { message = "User added successfully." });
         }
 
         return BadRequest("Failed to add user.");
     }
+
 
     //----------------------------------------------------------------------------------------------------------------
     [HttpPut("UserEdit/{id}")]
