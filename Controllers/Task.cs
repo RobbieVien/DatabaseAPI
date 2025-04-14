@@ -442,7 +442,7 @@ public class TaskController : ControllerBase
         }
 
 
-        //for Datagridview
+        //for Datagridview pag dinouble click
         [HttpGet("GetTasks")]
         public async Task<IActionResult> GetTasks()
         {
@@ -453,24 +453,22 @@ public class TaskController : ControllerBase
 
                 string query = @"
         SELECT 
-            sched_Id, 
             sched_taskTitle,
             sched_user,
             sched_taskDescription, 
-            sched_date, 
-            sched_inputted, 
-            sched_status 
+            sched_date,  
+            sched_status,
+            sched_notify
         FROM Tasks";
 
-                var tasks = await con.QueryAsync<Tasksdto>(@"
+                var tasks = await con.QueryAsync<taskDoubleClickDashboard>(@"
         SELECT 
-            sched_Id AS ScheduleId, 
             sched_taskTitle AS ScheduleTaskTitle,
             sched_user AS ScheduleUser,
             sched_taskDescription AS ScheduleTaskDescription, 
             sched_date AS ScheduleDate, 
-            sched_inputted AS ScheduleInputted, 
-            sched_status AS ScheduleStatus 
+            sched_status AS ScheduleStatus, 
+            sched_notify AS ScheduleNotify
         FROM Tasks");
 
                 return Ok(tasks);
@@ -481,10 +479,46 @@ public class TaskController : ControllerBase
                 return StatusCode(500, $"An error occurred while retrieving tasks: {ex.Message}");
             }
         }
+   
+    //eto yung nasa Dashboard talaga
+    [HttpGet("GetTasksDashboard")]
+    public async Task<IActionResult> GetTasksDashboard()
+    {
+        try
+        {
+            using var con = new MySqlConnection(_connectionString);
+            await con.OpenAsync();
+
+            string query = @"
+        SELECT 
+            sched_taskTitle,
+            sched_user,
+            sched_taskDescription, 
+            sched_date, 
+            sched_status 
+        FROM Tasks";
+
+            var tasks = await con.QueryAsync<taskDashboard>(@"
+        SELECT 
+            sched_taskTitle AS ScheduleTaskTitle,
+            sched_user AS ScheduleUser,
+            sched_taskDescription AS ScheduleTaskDescription, 
+            sched_date AS ScheduleDate, 
+            sched_status AS ScheduleStatus 
+        FROM Tasks");
+
+            return Ok(tasks);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error retrieving tasks: {ex.Message}");
+            return StatusCode(500, $"An error occurred while retrieving tasks: {ex.Message}");
+        }
+    }
 
 
 
-        [HttpGet("CountTasks")]
+    [HttpGet("CountTasks")]
         public async Task<IActionResult> CountTasks()
         {
             using var con = new MySqlConnection(_connectionString);

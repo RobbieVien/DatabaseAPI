@@ -37,7 +37,6 @@ public class TaskUserSideController : ControllerBase
 
             var query = @"
         SELECT 
-            sched_Id AS ScheduleId, 
             sched_taskTitle AS ScheduleTaskTitle,
             sched_user AS ScheduleUser,
             sched_taskDescription AS ScheduleTaskDescription, 
@@ -46,7 +45,7 @@ public class TaskUserSideController : ControllerBase
         FROM Tasks
         WHERE sched_user = @UserName AND sched_status = 0"; // pending only
 
-            var tasks = await con.QueryAsync<Tasksdto>(query, new { UserName = username });
+            var tasks = await con.QueryAsync<taskDashboard>(query, new { UserName = username });
 
             return Ok(tasks);
         }
@@ -57,7 +56,175 @@ public class TaskUserSideController : ControllerBase
         }
     }
 
+    //eto pag dinouble click na
+    [HttpGet("UserDoubleClickGetTasks")]
+    public async Task<IActionResult> UserDoubleClickGetTasks()
+    {
+        try
+        {
+            var username = HttpContext.Session.GetString("UserName");
+            if (string.IsNullOrEmpty(username))
+                return Unauthorized("User is not logged in.");
 
+            using var con = new MySqlConnection(_connectionString);
+            await con.OpenAsync();
+
+            var query = @"
+    SELECT 
+        sched_taskTitle AS ScheduleTaskTitle,
+        sched_user AS ScheduleUser,
+        sched_taskDescription AS ScheduleTaskDescription, 
+        sched_date AS ScheduleDate, 
+        sched_status AS ScheduleStatus,
+        sched_notify AS ScheduleNotify
+    FROM Tasks
+    WHERE sched_user = @UserName AND sched_status = 0"; // pending only
+
+            var tasks = await con.QueryAsync<taskDoubleClickDashboard>(query, new { UserName = username });
+            return Ok(tasks);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error retrieving tasks: {ex.Message}");
+            return StatusCode(500, $"An error occurred while retrieving tasks: {ex.Message}");
+        }
+    }
+
+
+    [HttpPut("UserUpdateTask/{scheduleId}")]
+    public async Task<IActionResult> UserUpdateTask(int scheduleId, [FromBody] UserTaskUpdateDto task)
+    {
+        try
+        {
+            // Get username from session
+            var username = HttpContext.Session.GetString("UserName");
+            if (string.IsNullOrEmpty(username))
+
+                return Unauthorized("User is not logged in.");
+
+            using (var connection = new MySqlConnection(_connectionString))
+            {
+                await connection.OpenAsync();
+
+                // Get Philippine time (UTC+8)
+                DateTime philippineTime = TimeZoneInfo.ConvertTimeFromUtc(
+                    DateTime.UtcNow,
+                    TimeZoneInfo.FindSystemTimeZoneById("Singapore Standard Time")
+                );
+
+                // Get original task data to verify ownership and for retrieving original values
+                var originalTask = await connection.QueryFirstOrDefaultAsync<Tasksdto>(@"
+                SELECT 
+                    sched_Id AS ScheduleId,
+                    sched_taskTitle AS ScheduleTaskTitle,
+                    sched_user AS ScheduleUser,
+                    sched_taskDescription AS ScheduleTaskDescription,
+                    sched_date AS ScheduleDate,
+                    sched_notify AS ScheduleNotify,
+                    sched_status AS ScheduleStatus,
+                    user_Id AS UserId
+                FROM Tasks 
+                WHERE sched_Id = @ScheduleId",
+                    new { ScheduleId = scheduleId });
+
+                if (originalTask == null)
+                {
+                    await Logger.LogAction(HttpContext,
+                        action: "UPDATE_ERROR",
+                        tableName: "Tasks",
+                        recordId: scheduleId,
+                        details: $"Task {scheduleId} not found during update"
+                    );
+                    return NotFound($"Task with ID {scheduleId} not found");
+                }
+
+                // Verify that the current user owns this task
+                if (originalTask.ScheduleUser != username)
+                {
+                    await Logger.LogAction(HttpContext,
+                        action: "UNAUTHORIZED_UPDATE_ATTEMPT",
+                        tableName: "Tasks",
+                        recordId: scheduleId,
+                        details: $"User {username} attempted to update task belonging to {originalTask.ScheduleUser}"
+                    );
+                    return Unauthorized("You can only update your own tasks.");
+                }
+
+                // Validate notification time
+                if (task.ScheduleNotify < 0)
+                {
+                    return BadRequest("Notification time cannot be negative.");
+                }
+
+                if (task.ScheduleNotify > 30)
+                {
+                    return BadRequest("Notification time cannot exceed 30 days.");
+                }
+
+                // Calculate notification date based on the original schedule date
+                DateTime notificationDate = originalTask.ScheduleDate.AddDays(-task.ScheduleNotify);
+                if (notificationDate < philippineTime.Date)
+                {
+                    return BadRequest("The notification time cannot be set in the past. Please choose a valid time.");
+                }
+
+                // Convert boolean status to integer for database
+                int statusValue = task.ScheduleStatus ? 1 : 0;
+
+                // Only update the status and notification fields
+                const string updateQuery = @"
+                UPDATE Tasks 
+                SET 
+                    sched_notify = @ScheduleNotify,
+                    sched_status = @ScheduleStatus
+                WHERE sched_Id = @ScheduleId";
+
+                await connection.ExecuteAsync(updateQuery, new
+                {
+                    task.ScheduleNotify,
+                    ScheduleStatus = statusValue,
+                    ScheduleId = scheduleId
+                });
+
+                // Track changes for logging
+                List<string> changes = new List<string>();
+
+                if (originalTask.ScheduleNotify != task.ScheduleNotify)
+                {
+                    changes.Add($"Notification Time: \"{originalTask.ScheduleNotify}\" → \"{task.ScheduleNotify}\"");
+                }
+
+                if (originalTask.ScheduleStatus != task.ScheduleStatus)
+                {
+                    changes.Add($"Status: \"{(originalTask.ScheduleStatus ? "Finished" : "Pending")}\" → \"{(task.ScheduleStatus ? "Finished" : "Pending")}\"");
+                }
+
+                if (changes.Count > 0)
+                {
+                    await Logger.LogAction(HttpContext,
+                        action: "UPDATE",
+                        tableName: "Tasks",
+                        recordId: scheduleId,
+                        details: $"Updated task record (ID: {scheduleId}). Changes: {string.Join(", ", changes)}"
+                    );
+                }
+
+                return Ok(new
+                {
+                    Message = $"Task entry with ID {scheduleId} updated successfully.",
+                    Changes = changes
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new
+            {
+                Message = "An error occurred while updating the task.",
+                ErrorDetails = ex.Message
+            });
+        }
+    }
 
 
     [HttpGet("UserCountPendingTasks")]
