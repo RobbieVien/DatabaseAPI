@@ -21,6 +21,7 @@ public class UserEditProfileController : ControllerBase
         _connectionString = configuration.GetConnectionString("DefaultConnection") ?? string.Empty;
     }
 
+    //sa USER to at ADMIN, since parehas lang naman sila
 
     [HttpPut("UserUpdate")]
     public async Task<IActionResult> UserUpdate([FromBody] EditUserDto userUpdate)
@@ -114,6 +115,7 @@ public class UserEditProfileController : ControllerBase
             {
                 await Logger.LogAction(HttpContext, "Edit", "ManageUsers", existingUser.user_Id, $"User updated their profile: {string.Join(", ", changes)}");
 
+                //etong string baka di to gumana update mo ako
                 return Ok(new
                 {
                     Message = "User profile updated successfully.",
