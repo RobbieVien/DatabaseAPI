@@ -84,7 +84,7 @@ public class FirstUserController : ControllerBase
             // Log with static message in details
             await Logger.LogAction(HttpContext, "Add", "ManageUsers", newUserId, "User has been created");
 
-            return Ok("User added successfully.");
+            return Ok(new { Message = $"User Added Successfully" });
         }
 
         return BadRequest("Failed to add user.");

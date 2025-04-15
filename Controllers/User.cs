@@ -30,7 +30,7 @@ public class UserController : ControllerBase
     //----------------------------------------------------------------------------------------------------------------
 
     [HttpPost("AddUser")]
-    public async Task<IActionResult> AddUser([FromBody] UserDto user)
+    public async Task<IActionResult> AddUser([FromBody] AddingUserDto user)
     {
         // Get current user info or use default for testing
         string currentUserName = "System";
@@ -49,7 +49,8 @@ public class UserController : ControllerBase
             }
         }
 
-        if (user == null || string.IsNullOrWhiteSpace(user.UserName) || string.IsNullOrWhiteSpace(user.Password))
+        // Validate input (no password check needed)
+        if (user == null || string.IsNullOrWhiteSpace(user.UserName))
         {
             return BadRequest("Invalid user data.");
         }
@@ -60,7 +61,7 @@ public class UserController : ControllerBase
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
 
-        // Case-insensitive, trimmed check for existing username
+        // Check for existing username
         string checkQuery = "SELECT COUNT(*) FROM ManageUsers WHERE LOWER(TRIM(user_Name)) = @UserName";
         int userCount = await con.ExecuteScalarAsync<int>(checkQuery, new { UserName = normalizedUsername });
 
@@ -69,12 +70,13 @@ public class UserController : ControllerBase
             return Conflict("Username already exists.");
         }
 
-        // Hash the password
-        string hashedPassword = PasswordHasher.HashPassword(user.Password);
+        // Always use default password "123"
+        string defaultPassword = "123";
+        string hashedPassword = PasswordHasher.HashPassword(defaultPassword);
 
         string insertQuery = @"
-    INSERT INTO ManageUsers (user_Fname, user_Lname, user_Role, user_Status, user_Name, user_Pass)
-    VALUES (@FirstName, @LastName, @Role, @Status, @UserName, @Password)";
+        INSERT INTO ManageUsers (user_Fname, user_Lname, user_Role, user_Status, user_Name, user_Pass)
+        VALUES (@FirstName, @LastName, @Role, @Status, @UserName, @Password)";
 
         int rowsAffected = await con.ExecuteAsync(insertQuery, new
         {
@@ -82,18 +84,14 @@ public class UserController : ControllerBase
             LastName = user.LastName,
             Role = user.Role,
             Status = user.Status,
-            UserName = user.UserName.Trim(), // Use trimmed version for DB
+            UserName = user.UserName.Trim(),
             Password = hashedPassword
         });
 
         if (rowsAffected > 0)
         {
-            // Get the ID of the newly added user
             int newUserId = await con.ExecuteScalarAsync<int>("SELECT LAST_INSERT_ID()");
-
-            // Log the action
             await Logger.LogAction(HttpContext, "Add", "ManageUsers", newUserId);
-
             return Ok(new { message = "User added successfully." });
         }
 
@@ -101,7 +99,11 @@ public class UserController : ControllerBase
     }
 
 
+
+
     //----------------------------------------------------------------------------------------------------------------
+
+    //di ko pa natetest to
     [HttpPut("UserEdit/{id}")]
     public async Task<IActionResult> UserEdit(int id, [FromBody] UserDto user)
     {
@@ -140,7 +142,7 @@ public class UserController : ControllerBase
         await con.OpenAsync();
 
         // Get existing user details for comparison
-        string selectQuery = "SELECT user_Id, user_Fname, user_Lname, user_Role, user_Status, user_Name, user_Pass FROM ManageUsers WHERE user_Id = @Id";
+        string selectQuery = "SELECT user_Id, user_Fname, user_Lname, user_Role, user_Status, user_Name FROM ManageUsers WHERE user_Id = @Id";
         var oldUser = await con.QueryFirstOrDefaultAsync<dynamic>(selectQuery, new { Id = id });
         if (oldUser == null)
         {
@@ -177,27 +179,15 @@ public class UserController : ControllerBase
             changes.Add($"updated \"{oldUser.user_Name}\" to \"{user.UserName}\" in UserName");
         }
 
-        // Only re-hash the password if it's changed
-        string newPassword = oldUser.user_Pass;
-        bool passwordChanged = false;
-
-        if (!string.IsNullOrWhiteSpace(user.Password) && !PasswordHasher.VerifyPassword(user.Password, oldUser.user_Pass))
-        {
-            newPassword = PasswordHasher.HashPassword(user.Password);
-            passwordChanged = true;
-            changes.Add("Password was updated");
-        }
-
-        // Update user
+        // Update user (no password update)
         string updateQuery = @"
-    UPDATE ManageUsers 
-    SET user_Fname = @FirstName,
-        user_Lname = @LastName,
-        user_Role = @Role,
-        user_Status = @Status,
-        user_Name = @UserName,
-        user_Pass = @Password
-    WHERE user_Id = @Id";
+        UPDATE ManageUsers 
+        SET user_Fname = @FirstName,
+            user_Lname = @LastName,
+            user_Role = @Role,
+            user_Status = @Status,
+            user_Name = @UserName
+        WHERE user_Id = @Id";
 
         int rowsAffected = await con.ExecuteAsync(updateQuery, new
         {
@@ -206,7 +196,6 @@ public class UserController : ControllerBase
             Role = user.Role,
             Status = user.Status,
             UserName = user.UserName,
-            Password = newPassword,
             Id = id
         });
 
@@ -223,11 +212,13 @@ public class UserController : ControllerBase
 
             // Log the edit action with detailed changes
             await Logger.LogAction(HttpContext, "Edit", "ManageUsers", id, changeMessage);
-            return Ok("User updated successfully.");
+            return Ok(new { message = "User updated successfully." });
         }
 
         return NotFound("No user found.");
     }
+
+
 
 
     [HttpDelete("DeleteUser/{id}")]
