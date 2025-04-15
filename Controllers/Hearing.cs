@@ -408,7 +408,6 @@ public class HearingController : ControllerBase
                          hearing_Case_Num, 
                          DATE_FORMAT(hearing_Case_Date, '%Y-%m-%d') AS hearing_Case_Date, 
                          hearing_Case_Time, 
-                         DATE_FORMAT(hearing_Case_Inputted, '%Y-%m-%d %H:%i:%s') AS hearing_Case_Inputted, 
                          hearing_case_status,
                          hearing_Judge,
                          hearing_trial_prosecutor,
@@ -421,19 +420,18 @@ public class HearingController : ControllerBase
         using var cmd = new MySqlCommand(query, con);
         using var reader = await cmd.ExecuteReaderAsync();
 
-        var hearings = new List<Hearingdto>();
+        var hearings = new List<HearingData>();
         while (await reader.ReadAsync())
         {
-            hearings.Add(new Hearingdto
+            hearings.Add(new HearingData
             {
-                HearingId = Convert.ToInt32(reader["hearing_Id"]),
+               
                 HearingCaseTitle = reader["hearing_Case_Title"]?.ToString(),
                 HearingCaseNumber = reader["hearing_Case_Num"]?.ToString(),
                 HearingCaseDate = reader["hearing_Case_Date"] != DBNull.Value ? DateOnly.Parse(reader["hearing_Case_Date"].ToString()) : DateOnly.MinValue,
                 HearingCaseTime = reader["hearing_Case_Time"] != DBNull.Value
                     ? TimeOnly.FromTimeSpan((TimeSpan)reader["hearing_Case_Time"])
                     : TimeOnly.MinValue,
-                HearingCaseInputted = reader["hearing_Case_Inputted"]?.ToString() ?? string.Empty,
                 HearingCaseStatus = Convert.ToBoolean(reader["hearing_case_status"]),
                 HearingJudge = reader["hearing_Judge"]?.ToString(),
                 HearingTrialProsecutor = reader["hearing_trial_prosecutor"]?.ToString(),
