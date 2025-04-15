@@ -31,15 +31,23 @@ public class UserEditProfileController : ControllerBase
             var currentUserName = HttpContext.Session.GetString("UserName");
             if (string.IsNullOrEmpty(currentUserName))
             {
-                // Alternatively, get from claims if session is not used
                 currentUserName = User?.Identity?.IsAuthenticated == true ? User.Identity.Name : null;
             }
 
             if (string.IsNullOrEmpty(currentUserName))
                 return Unauthorized("User is not logged in.");
 
-            if (userUpdate == null || string.IsNullOrWhiteSpace(userUpdate.UserName) || string.IsNullOrWhiteSpace(userUpdate.Password))
-                return BadRequest("Username and password are required.");
+            if (userUpdate == null || string.IsNullOrWhiteSpace(userUpdate.UserName)
+                || string.IsNullOrWhiteSpace(userUpdate.Password) || string.IsNullOrWhiteSpace(userUpdate.ConfirmPassword))
+                return BadRequest("Username, password, and confirm password are required.");
+
+            // Password length validation
+            if (userUpdate.Password.Length < 6)
+                return BadRequest("Password must be at least 6 characters long.");
+
+            // Confirm password match validation
+            if (userUpdate.Password != userUpdate.ConfirmPassword)
+                return BadRequest("Password and confirm password do not match.");
 
             using var con = new MySqlConnection(_connectionString);
             await con.OpenAsync();
@@ -55,13 +63,11 @@ public class UserEditProfileController : ControllerBase
             if (existingUser == null)
                 return NotFound("User not found.");
 
-            // Track changes for logging
             List<string> changes = new List<string>();
 
-            // Check if username is changing (case-insensitive compare)
+            // Check if username is changing (case-insensitive)
             if (!string.Equals(existingUser.user_Name, userUpdate.UserName.Trim(), StringComparison.OrdinalIgnoreCase))
             {
-                // Check if new username already exists
                 string checkUserQuery = @"
                 SELECT COUNT(*) FROM ManageUsers 
                 WHERE LOWER(TRIM(user_Name)) = @NewUserName AND user_Id != @UserId";
@@ -74,15 +80,16 @@ public class UserEditProfileController : ControllerBase
                 changes.Add($"UserName: \"{existingUser.user_Name}\" → \"{userUpdate.UserName.Trim()}\"");
             }
 
+            // Check if password is the same as current
+            bool isSamePassword = PasswordHasher.VerifyPassword(userUpdate.Password, existingUser.user_Pass);
+            if (isSamePassword)
+            {
+                return BadRequest("The new password cannot be the same as the current password.");
+            }
+
             // Hash the new password
             string hashedPassword = PasswordHasher.HashPassword(userUpdate.Password);
-
-            // Check if password is different (verify hashed)
-            bool passwordChanged = !PasswordHasher.VerifyPassword(userUpdate.Password, existingUser.user_Pass);
-            if (passwordChanged)
-            {
-                changes.Add("Password: (updated)");
-            }
+            changes.Add("Password: (updated)");
 
             if (changes.Count == 0)
             {
@@ -105,7 +112,6 @@ public class UserEditProfileController : ControllerBase
 
             if (rowsAffected > 0)
             {
-                // Log the update action
                 await Logger.LogAction(HttpContext, "Edit", "ManageUsers", existingUser.user_Id, $"User updated their profile: {string.Join(", ", changes)}");
 
                 return Ok(new
@@ -126,6 +132,7 @@ public class UserEditProfileController : ControllerBase
             });
         }
     }
+
 
 
 }

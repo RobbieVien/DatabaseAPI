@@ -29,12 +29,25 @@ public class FirstUserController : ControllerBase
 
     //----------------------------------------------------------------------------------------------------------------
 
+    //di pa to natetest yung validation lng naman dinagdag ko. 
     [HttpPost("FirstAddUser")]
     public async Task<IActionResult> FirstAddUser([FromBody] UserDto user)
     {
         if (user == null || string.IsNullOrWhiteSpace(user.UserName) || string.IsNullOrWhiteSpace(user.Password))
         {
             return BadRequest("Invalid user data.");
+        }
+
+        // Password validation: minimum 6 characters and at least 1 special character
+        if (user.Password.Length < 6)
+        {
+            return BadRequest("Password must be at least 6 characters long.");
+        }
+
+        var specialCharPattern = new System.Text.RegularExpressions.Regex(@"[!""#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]");
+        if (!specialCharPattern.IsMatch(user.Password))
+        {
+            return BadRequest("Password must contain at least one special character (e.g., !, @, #, $, etc.).");
         }
 
         using var con = new MySqlConnection(_connectionString);
@@ -89,4 +102,5 @@ public class FirstUserController : ControllerBase
 
         return BadRequest("Failed to add user.");
     }
+
 }
