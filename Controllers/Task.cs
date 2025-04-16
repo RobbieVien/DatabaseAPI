@@ -8,6 +8,7 @@ using DatabaseAPI.Models;
 using DatabaseAPI.Utilities;
 using ClosedXML.Excel;
 using DocumentFormat.OpenXml.Office2010.Excel;
+using System.Security.Claims;
 
 [Route("api/[controller]")]
 [ApiController]
@@ -366,6 +367,56 @@ public class TaskController : ControllerBase
         }
     }
 
+
+    // eto yung reset password pag nagrequest yung client
+
+    [HttpPut("ResetPassword/{userId}")]
+    public async Task<IActionResult> ResetPassword(int userId)
+    {
+        // Get user role from session
+        var userRole = HttpContext.Session.GetString("UserRole")?.ToLowerInvariant();
+
+        if (string.IsNullOrEmpty(userRole) || (userRole != "admin" && userRole != "chiefadmin"))
+        {
+            return StatusCode(403, "Only administrators can reset passwords.");
+        }
+
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        // Verify user exists
+        var userExists = await con.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM ManageUsers WHERE user_Id = @UserId",
+            new { UserId = userId });
+
+        if (userExists == 0)
+        {
+            return NotFound("User not found.");
+        }
+
+        // Set default password "123"
+        string defaultPassword = "123";
+        string hashedPassword = PasswordHasher.HashPassword(defaultPassword);
+
+        // Update password
+        int rowsAffected = await con.ExecuteAsync(
+            "UPDATE ManageUsers SET user_Pass = @Password WHERE user_Id = @UserId",
+            new { Password = hashedPassword, UserId = userId });
+
+        if (rowsAffected > 0)
+        {
+            // Log the reset action
+            await Logger.LogAction(HttpContext,
+                action: "PasswordReset",
+                tableName: "ManageUsers",
+                recordId: userId,
+                details: $"Password reset to default by admin with role '{userRole}'.");
+
+            return Ok("Password has been reset to the default.");
+        }
+
+        return BadRequest("Failed to reset password.");
+    }
 
 
 

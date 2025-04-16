@@ -318,12 +318,11 @@ public class UserController : ControllerBase
 
         using var reader = await cmd.ExecuteReaderAsync();
 
-        var users = new List<UserDto>();
+        var users = new List<GettingUserDto>();
         while (await reader.ReadAsync())
         {
-            users.Add(new UserDto
+            users.Add(new GettingUserDto
             {
-                UserId = Convert.ToInt32(reader["user_Id"]), // Make sure user_Id is included
                 FirstName = reader["user_Fname"]?.ToString(),
                 LastName = reader["user_Lname"]?.ToString(),
                 Role = reader["user_Role"]?.ToString(),
