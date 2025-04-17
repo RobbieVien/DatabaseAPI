@@ -78,6 +78,19 @@ namespace DatabaseAPI.Controllers
             return Ok(logs);
         }
 
+        [HttpGet("GetLogsByTable")]
+        public async Task<ActionResult<IEnumerable<LogsDto>>> GetLogsByTable([FromQuery] string tableName)
+        {
+            if (string.IsNullOrWhiteSpace(tableName))
+                return BadRequest("Table name is required.");
+
+            using var connection = new MySqlConnection(_connectionString);
+            var sql = "SELECT * FROM Logs WHERE TableName = @TableName ORDER BY Timestamp DESC";
+            var logs = await connection.QueryAsync<LogsDto>(sql, new { TableName = tableName });
+
+            return Ok(logs);
+        }
+
         [HttpGet("export-logs-pdf")]
         public async Task<IActionResult> ExportLogsPdf()
         {
