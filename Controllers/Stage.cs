@@ -35,7 +35,7 @@ public class StageController : ControllerBase
         using (var con = new MySqlConnection(_connectionString))
         {
             await con.OpenAsync();
-
+            var username = HttpContext.Session.GetString("UserName");
             try
             {
                 // Check if stage already exists (case-insensitive)
@@ -88,7 +88,7 @@ public class StageController : ControllerBase
             using (var connection = new MySqlConnection(_connectionString))
             {
                 await connection.OpenAsync();
-
+                var username = HttpContext.Session.GetString("UserName");
                 // Validate input
                 if (stageDto == null || string.IsNullOrWhiteSpace(stageDto.Stage))
                 {
@@ -171,7 +171,7 @@ public class StageController : ControllerBase
         using (var con = new MySqlConnection(_connectionString))
         {
             await con.OpenAsync();
-
+            var username = HttpContext.Session.GetString("UserName");
             try
             {
                 // Check if the stage exists by ID

@@ -27,6 +27,7 @@ public class DirectoryController : ControllerBase
         }
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
+        var username = HttpContext.Session.GetString("UserName");
         // Check if username already exists
         string checkQuery = "SELECT COUNT(*) FROM Directory WHERE direct_name = @DirectoryName";
         using var checkCmd = new MySqlCommand(checkQuery, con);
@@ -71,6 +72,7 @@ public class DirectoryController : ControllerBase
 
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
+        var username = HttpContext.Session.GetString("UserName");
 
         try
         {
@@ -181,6 +183,7 @@ public class DirectoryController : ControllerBase
 
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
+        var username = HttpContext.Session.GetString("UserName");
 
         try
         {

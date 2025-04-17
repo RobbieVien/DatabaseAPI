@@ -30,6 +30,8 @@ public class TaskController : ControllerBase
             return BadRequest("Invalid Task data.");
         }
 
+        var username = HttpContext.Session.GetString("UserName");
+
         // Get Philippine time (UTC+8)
         DateTime philippineTime = TimeZoneInfo.ConvertTimeFromUtc(
             DateTime.UtcNow,
@@ -167,12 +169,14 @@ public class TaskController : ControllerBase
             using (var connection = new MySqlConnection(_connectionString))
             {
                 await connection.OpenAsync();
+                var username = HttpContext.Session.GetString("UserName");
 
                 // Get Philippine time (UTC+8)
                 DateTime philippineTime = TimeZoneInfo.ConvertTimeFromUtc(
                     DateTime.UtcNow,
                     TimeZoneInfo.FindSystemTimeZoneById("Singapore Standard Time")
                 );
+
 
                 // Validate inputs
                 if (task.ScheduleDate.Date < philippineTime.Date)
@@ -383,7 +387,7 @@ public class TaskController : ControllerBase
 
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
-
+        var username = HttpContext.Session.GetString("UserName");
         // Verify user exists
         var userExists = await con.ExecuteScalarAsync<int>(
             "SELECT COUNT(*) FROM ManageUsers WHERE user_Id = @UserId",
@@ -440,8 +444,8 @@ public class TaskController : ControllerBase
 
             using var connection = new MySqlConnection(_connectionString);
             await connection.OpenAsync();
-
-            try
+            var username = HttpContext.Session.GetString("UserName");
+        try
             {
                 // Fetch task details before deletion
                 var existingTask = await connection.QueryFirstOrDefaultAsync<dynamic>(
