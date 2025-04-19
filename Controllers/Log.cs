@@ -78,6 +78,7 @@ namespace DatabaseAPI.Controllers
             return Ok(logs);
         }
 
+        //Ano to ha filter to by tables
         [HttpGet("GetLogsByTable")]
         public async Task<ActionResult<IEnumerable<LogsDto>>> GetLogsByTable([FromQuery] string tableName)
         {
