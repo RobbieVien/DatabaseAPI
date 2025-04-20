@@ -736,27 +736,28 @@ public class HearingController : ControllerBase
             DateTime philippineNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, philippineTimeZone);
 
             string query = @"
-        SELECT 
-            hearing_Case_Title AS HearingCaseTitle, 
-            hearing_Case_Num AS HearingCaseNumber, 
-            hearing_Judge AS HearingJudge,
-            hearing_Trial_Prosecutor AS HearingTrialProsecutor,
-            hearing_Branch_Clerk AS HearingBranchClerk,
-            hearing_Public_Attorney AS HearingPublicAttorney,
-            hearing_Court_Interpreter AS HearingCourtInterpreter,
-            hearing_Court_Stenographer AS HearingCourtStenographer,
-            hearing_case_status AS HearingCaseStatus,
-            hearing_Case_Date AS HearingCaseDate,  -- Returning as DateTime
-            hearing_Case_Time AS HearingCaseTime  -- Returning as TimeOnly (TimeSpan in C#)
-        FROM Hearing
-        ORDER BY hearing_Case_Date ASC, hearing_Case_Time ASC";
+    SELECT 
+        hearing_Case_Title AS HearingCaseTitle, 
+        hearing_Case_Num AS HearingCaseNumber, 
+        hearing_Judge AS HearingJudge,
+        hearing_Trial_Prosecutor AS HearingTrialProsecutor,
+        hearing_Branch_Clerk AS HearingBranchClerk,
+        hearing_Public_Attorney AS HearingPublicAttorney,
+        hearing_Court_Interpreter AS HearingCourtInterpreter,
+        hearing_Court_Stenographer AS HearingCourtStenographer,
+        hearing_case_status AS HearingCaseStatus,
+        hearing_Case_Date AS HearingCaseDate,  -- Returning as DateTime
+        hearing_Case_Time AS HearingCaseTime  -- Returning as TimeOnly (TimeSpan in C#)
+    FROM Hearing
+    ORDER BY hearing_Case_Date ASC, hearing_Case_Time ASC";
 
             using var connection = new MySqlConnection(_connectionString);
             var hearingData = (await connection.QueryAsync<Hearingexportdto>(query)).ToList();
 
+            // Check if hearingData is empty and return an appropriate response
             if (!hearingData.Any())
             {
-                return NotFound("No hearing records found.");
+                return BadRequest("Cannot export report. No hearing records found in the database.");
             }
 
             // Create Excel workbook
