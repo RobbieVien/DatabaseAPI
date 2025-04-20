@@ -75,7 +75,7 @@ namespace DatabaseAPI.Controllers
 
             string newName = taskTypeDto.TaskTypeName.Trim();
             var username = HttpContext.Session.GetString("UserName");
-
+    
             using (var con = new MySqlConnection(_connectionString))
             {
                 await con.OpenAsync();
