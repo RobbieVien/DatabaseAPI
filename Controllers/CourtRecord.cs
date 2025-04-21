@@ -29,6 +29,7 @@ public class CourtRecordController : ControllerBase
 
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
+        var username = HttpContext.Session.GetString("UserName");
 
         try
         {
@@ -120,6 +121,7 @@ public class CourtRecordController : ControllerBase
 
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
+        var username = HttpContext.Session.GetString("UserName");
 
         try
         {
@@ -240,6 +242,7 @@ public class CourtRecordController : ControllerBase
 
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
+        var username = HttpContext.Session.GetString("UserName");
 
         try
         {
@@ -447,6 +450,7 @@ public class CourtRecordController : ControllerBase
 
         await using var con = new MySqlConnection(modifiedConnectionString);
         await con.OpenAsync();
+
 
         string query = @"
     SELECT 
