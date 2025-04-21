@@ -74,14 +74,15 @@
 
     public class NewAddCourtRecorddto
     {
-        public int CourtRecordId { get; set; }
         public string RecordCaseNumber { get; set; } = string.Empty;
         public string RecordCaseTitle { get; set; } = string.Empty;
-        public string RecordDateInputted { get; set; } = string.Empty; // Format: "yyyy-MM-dd"
-        public string? RecordDateFiledOCC { get; set; }  // Format: "yyyy-MM-dd" 
-        public string? RecordDateFiledReceived { get; set; }  // Format: "yyyy-MM-dd"
+        public DateTime? RecordDateFiledReceived { get; set; }  // DATE only
+        public DateTime? RecordDateFiledOcc { get; set; }       // DATE only
         public string RecordRepublicAct { get; set; } = string.Empty;
         public string RecordNatureDescription { get; set; } = string.Empty;
     }
+
+
+
 
 }

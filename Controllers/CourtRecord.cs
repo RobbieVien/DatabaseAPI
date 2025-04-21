@@ -20,7 +20,9 @@ public class CourtRecordController : ControllerBase
     }
 
     [HttpPost("AddCourtRecord")]
-    public async Task<IActionResult> AddCourtRecord([FromBody] GetAllCourtRecorddto courtrecord, [FromHeader(Name = "UserName")] string userName = "System")
+    public async Task<IActionResult> AddCourtRecord(
+     [FromBody] NewAddCourtRecorddto courtrecord,
+     [FromHeader(Name = "UserName")] string userName = "System")
     {
         if (courtrecord == null || string.IsNullOrWhiteSpace(courtrecord.RecordCaseNumber))
         {
@@ -32,14 +34,15 @@ public class CourtRecordController : ControllerBase
 
         try
         {
-            // Get current time in Asia/Manila timezone
+            // Get current Philippine time
             var philippinesTime = TimeZoneInfo.ConvertTime(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila"));
             var currentYear = philippinesTime.Year;
+            var dateInputted = philippinesTime; // rec_DateTime_Inputted
 
-            // Append " -M-YYYY" to case number
+            // Append " -M-YYYY" to the case number
             string modifiedCaseNumber = $"{courtrecord.RecordCaseNumber.Trim()} -M-{currentYear}";
 
-            // Check for duplicate case number
+            // Check if case number already exists
             var duplicateCount = await con.ExecuteScalarAsync<int>(
                 "SELECT COUNT(*) FROM COURTRECORD WHERE rec_Case_Number = @CaseNumber",
                 new { CaseNumber = modifiedCaseNumber });
@@ -49,10 +52,12 @@ public class CourtRecordController : ControllerBase
                 return Conflict("A court record with the same case number already exists.");
             }
 
+            // Prepare query
             string insertQuery = @"
             INSERT INTO COURTRECORD (
                 rec_Case_Number,
                 rec_Case_Title,
+                rec_DateTime_Inputted,
                 rec_Date_Filed_Occ,
                 rec_Date_Filed_Received,
                 rec_Case_Status,
@@ -62,6 +67,7 @@ public class CourtRecordController : ControllerBase
             VALUES (
                 @CaseNumber,
                 @CaseTitle,
+                @RecordDateInputted,
                 @RecordDateFiledOcc,
                 @RecordDateFiledReceived,
                 @RecordCaseStatus,
@@ -74,9 +80,10 @@ public class CourtRecordController : ControllerBase
             {
                 CaseNumber = modifiedCaseNumber,
                 CaseTitle = courtrecord.RecordCaseTitle,
-                RecordDateFiledOcc = courtrecord.RecordDateInputted,
-                RecordDateFiledReceived = courtrecord.RecordDateFiledReceived,
-                RecordCaseStatus = "Active", // Always Active
+                RecordDateInputted = dateInputted,
+                RecordDateFiledOcc = courtrecord.RecordDateFiledOcc?.Date,           // DATE only
+                RecordDateFiledReceived = courtrecord.RecordDateFiledReceived?.Date, // DATE only
+                RecordCaseStatus = "Active",                                          // default status
                 RecordRepublicAct = courtrecord.RecordRepublicAct,
                 RecordNatureDescription = courtrecord.RecordNatureDescription
             });
@@ -100,6 +107,10 @@ public class CourtRecordController : ControllerBase
             });
         }
     }
+
+
+
+
 
 
 
