@@ -21,8 +21,8 @@ public class CourtRecordController : ControllerBase
 
     [HttpPost("AddCourtRecord")]
     public async Task<IActionResult> AddCourtRecord(
-     [FromBody] NewAddCourtRecorddto courtrecord,
-     [FromHeader(Name = "UserName")] string userName = "System")
+        [FromBody] NewAddCourtRecorddto courtrecord,
+        [FromHeader(Name = "UserName")] string userName = "System")
     {
         if (courtrecord == null || string.IsNullOrWhiteSpace(courtrecord.RecordCaseNumber))
         {
@@ -81,9 +81,9 @@ public class CourtRecordController : ControllerBase
                 CaseNumber = modifiedCaseNumber,
                 CaseTitle = courtrecord.RecordCaseTitle,
                 RecordDateInputted = dateInputted,
-                RecordDateFiledOcc = courtrecord.RecordDateFiledOcc?.Date,           // DATE only
-                RecordDateFiledReceived = courtrecord.RecordDateFiledReceived?.Date, // DATE only
-                RecordCaseStatus = "Active",                                          // default status
+                RecordDateFiledOcc = courtrecord.RecordDateFiledOcc.ToDateTime(TimeOnly.MinValue),
+                RecordDateFiledReceived = courtrecord.RecordDateFiledReceived.ToDateTime(TimeOnly.MinValue),
+                RecordCaseStatus = "Active", // Always Active
                 RecordRepublicAct = courtrecord.RecordRepublicAct,
                 RecordNatureDescription = courtrecord.RecordNatureDescription
             });
@@ -107,6 +107,7 @@ public class CourtRecordController : ControllerBase
             });
         }
     }
+
 
 
 

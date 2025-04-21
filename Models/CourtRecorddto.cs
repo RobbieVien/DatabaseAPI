@@ -76,11 +76,12 @@
     {
         public string RecordCaseNumber { get; set; } = string.Empty;
         public string RecordCaseTitle { get; set; } = string.Empty;
-        public DateTime? RecordDateFiledReceived { get; set; }  // DATE only
-        public DateTime? RecordDateFiledOcc { get; set; }       // DATE only
+        public DateOnly RecordDateFiledReceived { get; set; }  // DATE only, required
+        public DateOnly RecordDateFiledOcc { get; set; }        // DATE only, required
         public string RecordRepublicAct { get; set; } = string.Empty;
         public string RecordNatureDescription { get; set; } = string.Empty;
     }
+
 
 
 
