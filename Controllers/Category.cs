@@ -205,25 +205,41 @@ public class CategoryController : ControllerBase
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
 
-        string query = "SELECT cat_Id, cat_legalcase, cat_republicAct, cat_natureCase FROM Category";
-        using var cmd = new MySqlCommand(query, con);
+        string query = @"
+        SELECT 
+            c.cat_Id AS CategoryId, 
+            c.cat_legalcase AS CategoryLegalCase, 
+            c.cat_republicAct AS CategoryRepublicAct, 
+            c.cat_natureCase AS CategoryNatureCase,
+            COUNT(r.rec_Republic_Act) AS CategoryCount
+        FROM Category c
+        LEFT JOIN COURTRECORD r 
+            ON c.cat_republicAct = r.rec_Republic_Act
+        GROUP BY 
+            c.cat_Id, 
+            c.cat_legalcase, 
+            c.cat_republicAct, 
+            c.cat_natureCase";
 
+        using var cmd = new MySqlCommand(query, con);
         using var reader = await cmd.ExecuteReaderAsync();
 
-        var categories = new List<Categorydto>();
+        var categories = new List<GetCategorydto>();
         while (await reader.ReadAsync())
         {
-            categories.Add(new Categorydto
+            categories.Add(new GetCategorydto
             {
-                CategoryId = Convert.ToInt32(reader["cat_Id"]), // Make sure user_Id is included
-                CategoryLegalCase = reader["cat_legalcase"]?.ToString(),
-                CategoryRepublicAct = reader["cat_republicAct"]?.ToString(),
-                CategoryNatureCase = reader["cat_natureCase"]?.ToString()
+                CategoryId = Convert.ToInt32(reader["CategoryId"]),
+                CategoryLegalCase = reader["CategoryLegalCase"]?.ToString(),
+                CategoryRepublicAct = reader["CategoryRepublicAct"]?.ToString(),
+                CategoryNatureCase = reader["CategoryNatureCase"]?.ToString(),
+                CategoryCount = Convert.ToInt32(reader["CategoryCount"])
             });
         }
 
         return Ok(categories);
     }
+
 
     [HttpGet("search")]
     public async Task<IActionResult> SearchCategories([FromQuery] string query)

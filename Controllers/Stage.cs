@@ -221,10 +221,12 @@ public class StageController : ControllerBase
             {
                 string query = @"
                 SELECT 
-                    stage_stage AS Stage, 
-                    stage_usage_count AS UsageCount 
-                FROM Stage
-                ORDER BY stage_stage ASC";
+                    s.stage_stage AS Stage, 
+                    COUNT(c.rec_Case_Stage) AS UsageCount
+                FROM Stage s
+                LEFT JOIN COURTRECORD c ON s.stage_stage = c.rec_Case_Stage
+                GROUP BY s.stage_stage
+                ORDER BY s.stage_stage ASC";
 
                 var stages = await con.QueryAsync<StageDto>(query);
                 return Ok(stages);
@@ -234,7 +236,8 @@ public class StageController : ControllerBase
                 return StatusCode(500, $"An error occurred: {ex.Message}");
             }
         }
-    }
+    }s
+
 
 
 
