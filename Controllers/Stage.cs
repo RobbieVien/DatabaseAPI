@@ -36,6 +36,7 @@ public class StageController : ControllerBase
         {
             await con.OpenAsync();
             var username = HttpContext.Session.GetString("UserName");
+
             try
             {
                 // Check if stage already exists (case-insensitive)
@@ -47,15 +48,14 @@ public class StageController : ControllerBase
                     return Conflict($"Stage '{trimmedStage}' already exists.");
                 }
 
-                // Insert new stage
+                // Insert new stage with default usage count = 0
                 string insertQuery = @"
                 INSERT INTO Stage (stage_stage, stage_usage_count)
-                VALUES (@Stage, @UsageCount)";
+                VALUES (@Stage, 0)";
 
                 int rowsAffected = await con.ExecuteAsync(insertQuery, new
                 {
-                    Stage = trimmedStage,
-                    UsageCount = stageDto.UsageCount
+                    Stage = trimmedStage
                 });
 
                 if (rowsAffected == 0)
@@ -67,7 +67,7 @@ public class StageController : ControllerBase
                 await Logger.LogActionAdd(HttpContext,
                     action: "INSERT",
                     tableName: "Stage",
-                    details: $"Stage '{trimmedStage}' added with usage count {stageDto.UsageCount}.");
+                    details: $"Stage '{trimmedStage}' added with default usage count 0.");
 
                 return Ok(new { message = "Stage added successfully." });
             }
@@ -80,81 +80,76 @@ public class StageController : ControllerBase
 
 
     // Update Stage Name based on ID
-    [HttpPut("UpdateStage/{stageId}")]
-    public async Task<IActionResult> UpdateStage(int stageId, [FromBody] StageDto stageDto)
+    [HttpPut("UpdateStage/{id}")]
+    public async Task<IActionResult> UpdateStage(
+     int id,
+     [FromBody] UpdateStageRequest request)
     {
-        try
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        var username = HttpContext.Session.GetString("UserName");
+
+        // Fetch old stage
+        string selectQuery = "SELECT stage_stage AS Stage FROM Stage WHERE stage_Id = @Id";
+        var oldStage = await con.QueryFirstOrDefaultAsync<StageDto>(selectQuery, new { Id = id });
+
+        if (oldStage == null)
         {
-            using (var connection = new MySqlConnection(_connectionString))
+            return NotFound($"No stage found with ID: {id}");
+        }
+
+        // Normalize nulls
+        oldStage.Stage ??= "";
+        request.Stage.Stage ??= "";
+
+        // Check for duplicate
+        string duplicateCheck = @"
+        SELECT COUNT(*) FROM Stage 
+        WHERE LOWER(stage_stage) = LOWER(@Stage) 
+        AND stage_Id != @Id";
+
+        int duplicateCount = await con.ExecuteScalarAsync<int>(duplicateCheck, new
+        {
+            Stage = request.Stage.Stage.Trim(),
+            Id = id
+        });
+
+        if (duplicateCount > 0)
+        {
+            return Conflict($"Stage name '{request.Stage.Stage}' already exists.");
+        }
+
+        // Update
+        string updateQuery = "UPDATE Stage SET stage_stage = @Stage WHERE stage_Id = @Id";
+        int rowsAffected = await con.ExecuteAsync(updateQuery, new
+        {
+            Stage = request.Stage.Stage.Trim(),
+            Id = id
+        });
+
+        if (rowsAffected > 0)
+        {
+            // Log changes
+            List<string> changes = new();
+            if (!oldStage.Stage.Equals(request.Stage.Stage.Trim(), StringComparison.OrdinalIgnoreCase))
             {
-                await connection.OpenAsync();
-                var username = HttpContext.Session.GetString("UserName");
-                // Validate input
-                if (stageDto == null || string.IsNullOrWhiteSpace(stageDto.Stage))
-                {
-                    return BadRequest("Invalid stage data.");
-                }
-
-                string newStage = stageDto.Stage.Trim();
-
-                // Check if stage with this ID exists
-                string checkIdQuery = "SELECT stage_Id FROM Stage WHERE stage_Id = @StageId";
-                var existingStage = await connection.QueryFirstOrDefaultAsync<int>(checkIdQuery, new { StageId = stageId });
-
-                if (existingStage == 0)
-                {
-                    return NotFound($"Stage with ID {stageId} not found.");
-                }
-
-                // Check if the new stage name already exists (excluding the current stage)
-                string checkDuplicateQuery = @"
-                    SELECT COUNT(*) FROM Stage 
-                    WHERE LOWER(stage_stage) = LOWER(@Stage) AND stage_Id != @StageId";
-
-                int duplicateCount = await connection.ExecuteScalarAsync<int>(checkDuplicateQuery, new
-                {
-                    Stage = newStage,
-                    StageId = stageId
-                });
-
-                if (duplicateCount > 0)
-                {
-                    return Conflict($"Stage name '{newStage}' already exists.");
-                }
-
-                // Update the stage name
-                string updateQuery = @"UPDATE Stage SET stage_stage = @Stage WHERE stage_Id = @StageId";
-
-                int rowsAffected = await connection.ExecuteAsync(updateQuery, new
-                {
-                    Stage = newStage,
-                    StageId = stageId
-                });
-
-                if (rowsAffected == 0)
-                {
-                    return StatusCode(500, "Failed to update stage.");
-                }
-
-                // Log the action
-                await Logger.LogAction(HttpContext,
-                    action: "UPDATE",
-                    tableName: "Stage",
-                    recordId: stageId,
-                    details: $"Stage ID {stageId} updated to '{newStage}'");
-
-                return Ok(new { message = "Stage updated successfully." });
+                changes.Add($"Stage: \"{oldStage.Stage}\" → \"{request.Stage.Stage.Trim()}\"");
             }
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new
+
+            if (changes.Count > 0)
             {
-                Message = "An error occurred while updating the stage.",
-                ErrorDetails = ex.Message
-            });
+                string details = string.Join(", ", changes);
+                await Logger.LogAction(HttpContext, "UPDATE", "Stage", id, details);
+            }
+
+            return Ok(new { message = "Stage updated successfully." });
         }
+
+        return StatusCode(500, "Update failed. No rows affected.");
     }
+
+
 
 
 
