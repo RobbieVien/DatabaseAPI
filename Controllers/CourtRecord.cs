@@ -20,7 +20,7 @@ public class CourtRecordController : ControllerBase
     }
 
     [HttpPost("AddCourtRecord")]
-    public async Task<IActionResult> AddCourtRecord([FromBody] NewAddCourtRecorddto courtrecord, [FromHeader(Name = "UserName")] string userName = "System")
+    public async Task<IActionResult> AddCourtRecord([FromBody] GetAllCourtRecorddto courtrecord, [FromHeader(Name = "UserName")] string userName = "System")
     {
         if (courtrecord == null || string.IsNullOrWhiteSpace(courtrecord.RecordCaseNumber))
         {
@@ -35,7 +35,6 @@ public class CourtRecordController : ControllerBase
             // Get current time in Asia/Manila timezone
             var philippinesTime = TimeZoneInfo.ConvertTime(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila"));
             var currentYear = philippinesTime.Year;
-            var yearOnlyDate = new DateTime(currentYear, 1, 1); // January 1st of the current year
 
             // Append " -M-YYYY" to case number
             string modifiedCaseNumber = $"{courtrecord.RecordCaseNumber.Trim()} -M-{currentYear}";
@@ -51,33 +50,33 @@ public class CourtRecordController : ControllerBase
             }
 
             string insertQuery = @"
-        INSERT INTO COURTRECORD (
-            rec_Case_Number,
-            rec_Case_Title,
-            rec_Date_Filed_Occ,
-            rec_Date_Filed_Received,
-            rec_Case_Status,
-            rec_Republic_Act,
-            rec_Nature_Descrip
-        )
-        VALUES (
-            @CaseNumber,
-            @CaseTitle,
-            @RecordDateFiledOcc,
-            @RecordDateFiledReceived,
-            @RecordCaseStatus,
-            @RecordRepublicAct,
-            @RecordNatureDescription
-        );
-        SELECT LAST_INSERT_ID();";
+            INSERT INTO COURTRECORD (
+                rec_Case_Number,
+                rec_Case_Title,
+                rec_Date_Filed_Occ,
+                rec_Date_Filed_Received,
+                rec_Case_Status,
+                rec_Republic_Act,
+                rec_Nature_Descrip
+            )
+            VALUES (
+                @CaseNumber,
+                @CaseTitle,
+                @RecordDateFiledOcc,
+                @RecordDateFiledReceived,
+                @RecordCaseStatus,
+                @RecordRepublicAct,
+                @RecordNatureDescription
+            );
+            SELECT LAST_INSERT_ID();";
 
             int newRecordId = await con.ExecuteScalarAsync<int>(insertQuery, new
             {
                 CaseNumber = modifiedCaseNumber,
                 CaseTitle = courtrecord.RecordCaseTitle,
-                RecordDateFiledOcc = courtrecord.RecordDateFiledOCC,
+                RecordDateFiledOcc = courtrecord.RecordDateInputted,
                 RecordDateFiledReceived = courtrecord.RecordDateFiledReceived,
-                RecordCaseStatus = "Active", // always Active
+                RecordCaseStatus = "Active", // Always Active
                 RecordRepublicAct = courtrecord.RecordRepublicAct,
                 RecordNatureDescription = courtrecord.RecordNatureDescription
             });
@@ -101,6 +100,7 @@ public class CourtRecordController : ControllerBase
             });
         }
     }
+
 
 
 
