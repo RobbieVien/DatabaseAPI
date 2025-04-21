@@ -20,7 +20,7 @@ public class CourtRecordController : ControllerBase
     }
 
     [HttpPost("AddCourtRecord")]
-    public async Task<IActionResult> AddCourtRecord([FromBody] NewCourtRecorddto courtrecord, [FromHeader(Name = "UserName")] string userName = "System")
+    public async Task<IActionResult> AddCourtRecord([FromBody] NewAddCourtRecorddto courtrecord, [FromHeader(Name = "UserName")] string userName = "System")
     {
         if (courtrecord == null || string.IsNullOrWhiteSpace(courtrecord.RecordCaseNumber))
         {
@@ -29,7 +29,6 @@ public class CourtRecordController : ControllerBase
 
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
-        var username = HttpContext.Session.GetString("UserName");
 
         try
         {
@@ -38,10 +37,10 @@ public class CourtRecordController : ControllerBase
             var currentYear = philippinesTime.Year;
             var yearOnlyDate = new DateTime(currentYear, 1, 1); // January 1st of the current year
 
-            // Append " -M-2025" to case number
+            // Append " -M-YYYY" to case number
             string modifiedCaseNumber = $"{courtrecord.RecordCaseNumber.Trim()} -M-{currentYear}";
 
-            // Check for duplicate case number (with the "-M-YYYY" appended)
+            // Check for duplicate case number
             var duplicateCount = await con.ExecuteScalarAsync<int>(
                 "SELECT COUNT(*) FROM COURTRECORD WHERE rec_Case_Number = @CaseNumber",
                 new { CaseNumber = modifiedCaseNumber });
@@ -52,29 +51,25 @@ public class CourtRecordController : ControllerBase
             }
 
             string insertQuery = @"
-            INSERT INTO COURTRECORD (
-                rec_Case_Number,
-                rec_Case_Title,
-                rec_Date_Filed_Occ,
-                rec_Date_Filed_Received,
-                rec_Transferred,
-                rec_Case_Status,
-                rec_Republic_Act,
-                rec_Nature_Descrip,
-                rec_DateTime_Inputted
-            )
-            VALUES (
-                @CaseNumber,
-                @CaseTitle,
-                @RecordDateFiledOcc,
-                @RecordDateFiledReceived,
-                @RecordTransferred,
-                @RecordCaseStatus,
-                @RecordRepublicAct,
-                @RecordNatureDescription,
-                @YearOnly
-            );
-            SELECT LAST_INSERT_ID();";
+        INSERT INTO COURTRECORD (
+            rec_Case_Number,
+            rec_Case_Title,
+            rec_Date_Filed_Occ,
+            rec_Date_Filed_Received,
+            rec_Case_Status,
+            rec_Republic_Act,
+            rec_Nature_Descrip
+        )
+        VALUES (
+            @CaseNumber,
+            @CaseTitle,
+            @RecordDateFiledOcc,
+            @RecordDateFiledReceived,
+            @RecordCaseStatus,
+            @RecordRepublicAct,
+            @RecordNatureDescription
+        );
+        SELECT LAST_INSERT_ID();";
 
             int newRecordId = await con.ExecuteScalarAsync<int>(insertQuery, new
             {
@@ -82,11 +77,9 @@ public class CourtRecordController : ControllerBase
                 CaseTitle = courtrecord.RecordCaseTitle,
                 RecordDateFiledOcc = courtrecord.RecordDateFiledOCC,
                 RecordDateFiledReceived = courtrecord.RecordDateFiledReceived,
-                RecordTransferred = courtrecord.RecordTransfer,
                 RecordCaseStatus = "Active", // always Active
                 RecordRepublicAct = courtrecord.RecordRepublicAct,
-                RecordNatureDescription = courtrecord.RecordNatureDescription,
-                YearOnly = yearOnlyDate
+                RecordNatureDescription = courtrecord.RecordNatureDescription
             });
 
             if (newRecordId > 0)
@@ -108,6 +101,7 @@ public class CourtRecordController : ControllerBase
             });
         }
     }
+
 
 
 
