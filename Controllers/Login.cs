@@ -27,7 +27,7 @@ namespace DatabaseAPI.Controllers
             using var connection = new MySqlConnection(_connectionString);
             await connection.OpenAsync();
 
-            // Step 1: Check if the user exists and get their password hash
+
             string passwordSql = "SELECT user_Pass FROM ManageUsers WHERE user_Name = @UserName";
             string storedHash = await connection.QueryFirstOrDefaultAsync<string>(passwordSql, new { UserName = user.UserName });
 
@@ -41,7 +41,6 @@ namespace DatabaseAPI.Controllers
                 return Unauthorized("Invalid username or password.");
             }
 
-            // Step 2: Verify password
             bool isPasswordValid = PasswordHasher.VerifyPassword(user.Password, storedHash);
 
             if (!isPasswordValid)
@@ -49,7 +48,6 @@ namespace DatabaseAPI.Controllers
                 return Unauthorized("Invalid username or password.");
             }
 
-            // Step 3: Fetch the user data (with aliasing to match UserDto property names)
             string userSql = @"
         SELECT 
             user_id AS UserId,
@@ -69,13 +67,11 @@ namespace DatabaseAPI.Controllers
                 return Unauthorized("User not found.");
             }
 
-            // Step 4: Store user information in the session
+
             HttpContext.Session.SetString("UserName", userData.UserName ?? "");
             HttpContext.Session.SetString("UserRole", userData.Role ?? "");
 
             // Log the login action
-
-            // Step 5: Return user data as JSON
             return Ok(new { message = "Login successfully." });
         }
 
