@@ -20,9 +20,7 @@ public class CourtRecordController : ControllerBase
     }
 
     [HttpPost("AddCourtRecord")]
-    public async Task<IActionResult> AddCourtRecord(
-        [FromBody] NewAddCourtRecorddto courtrecord,
-        [FromHeader(Name = "UserName")] string userName = "System")
+    public async Task<IActionResult> AddCourtRecord([FromBody] NewAddCourtRecorddto courtrecord)
     {
         if (courtrecord == null || string.IsNullOrWhiteSpace(courtrecord.RecordCaseNumber))
         {
@@ -36,16 +34,15 @@ public class CourtRecordController : ControllerBase
         {
             // Get current Philippine time
             var philippinesTime = TimeZoneInfo.ConvertTime(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila"));
-            var currentYear = philippinesTime.Year;
             var dateInputted = philippinesTime; // rec_DateTime_Inputted
 
-            // Append " -M-YYYY" to the case number
-            string modifiedCaseNumber = $"{courtrecord.RecordCaseNumber.Trim()} -M-{currentYear}";
+            // Use the case number as provided (no modification)
+            string caseNumber = courtrecord.RecordCaseNumber.Trim();
 
             // Check if case number already exists
             var duplicateCount = await con.ExecuteScalarAsync<int>(
                 "SELECT COUNT(*) FROM COURTRECORD WHERE rec_Case_Number = @CaseNumber",
-                new { CaseNumber = modifiedCaseNumber });
+                new { CaseNumber = caseNumber });
 
             if (duplicateCount > 0)
             {
@@ -62,7 +59,8 @@ public class CourtRecordController : ControllerBase
                 rec_Date_Filed_Received,
                 rec_Case_Status,
                 rec_Republic_Act,
-                rec_Nature_Descrip
+                rec_Nature_Descrip,
+                rec_Case_Stage
             )
             VALUES (
                 @CaseNumber,
@@ -72,25 +70,26 @@ public class CourtRecordController : ControllerBase
                 @RecordDateFiledReceived,
                 @RecordCaseStatus,
                 @RecordRepublicAct,
-                @RecordNatureDescription
+                @RecordNatureDescription,
+                @RecordCaseStage
             );
             SELECT LAST_INSERT_ID();";
 
             int newRecordId = await con.ExecuteScalarAsync<int>(insertQuery, new
             {
-                CaseNumber = modifiedCaseNumber,
+                CaseNumber = caseNumber,
                 CaseTitle = courtrecord.RecordCaseTitle,
                 RecordDateInputted = dateInputted,
                 RecordDateFiledOcc = courtrecord.RecordDateFiledOcc.ToDateTime(TimeOnly.MinValue),
                 RecordDateFiledReceived = courtrecord.RecordDateFiledReceived.ToDateTime(TimeOnly.MinValue),
-                RecordCaseStatus = "Active", // Always Active
+                RecordCaseStatus = courtrecord.RecordCaseStatus,
                 RecordRepublicAct = courtrecord.RecordRepublicAct,
-                RecordNatureDescription = courtrecord.RecordNatureDescription
+                RecordNatureDescription = courtrecord.RecordNatureDescription,
+                RecordCaseStage = courtrecord.RecordCaseStage // <-- NEW PARAMETER
             });
 
             if (newRecordId > 0)
             {
-                await Logger.LogAction(HttpContext, $"Added {courtrecord.RecordCaseTitle} successfully.", "COURTRECORD", newRecordId);
                 return Ok(new { Message = $"Added {courtrecord.RecordCaseTitle} successfully.", RecordId = newRecordId });
             }
             else
@@ -107,6 +106,8 @@ public class CourtRecordController : ControllerBase
             });
         }
     }
+
+
 
 
 
@@ -386,15 +387,16 @@ public class CourtRecordController : ControllerBase
         await con.OpenAsync();
 
         string query = @"
-    SELECT 
-        rec_Case_Number, 
-        rec_Case_Title, 
-        rec_DateTime_Inputted,
-        rec_Date_Filed_Received,
-        rec_Case_Status,
-        rec_Republic_Act,
-        rec_Nature_Descrip
-    FROM COURTRECORD";
+        SELECT 
+            rec_Case_Number, 
+            rec_Case_Title, 
+            rec_DateTime_Inputted,
+            rec_Date_Filed_Received,
+            rec_Case_Status,
+            rec_Republic_Act,
+            rec_Nature_Descrip,
+            rec_Case_Stage
+        FROM COURTRECORD";
 
         await using var cmd = new MySqlCommand(query, con);
 
@@ -407,17 +409,14 @@ public class CourtRecordController : ControllerBase
             {
                 var dto = new GetAllCourtRecorddto
                 {
-                    RecordCaseNumber = reader.IsDBNull("rec_Case_Number") ? string.Empty : reader.GetString("rec_Case_Number"),
-                    RecordCaseTitle = reader.IsDBNull("rec_Case_Title") ? string.Empty : reader.GetString("rec_Case_Title"),
-                    RecordCaseStatus = reader.IsDBNull("rec_Case_Status") ? string.Empty : reader.GetString("rec_Case_Status"),
-                    RecordRepublicAct = reader.IsDBNull("rec_Republic_Act") ? string.Empty : reader.GetString("rec_Republic_Act"),
-                    RecordNatureDescription = reader.IsDBNull("rec_Nature_Descrip") ? string.Empty : reader.GetString("rec_Nature_Descrip"),
-                    RecordDateInputted = reader.IsDBNull("rec_DateTime_Inputted")
-                        ? string.Empty
-                        : Convert.ToDateTime(reader["rec_DateTime_Inputted"]).ToString("yyyy-MM-dd"),
-                    RecordDateFiledReceived = reader.IsDBNull("rec_Date_Filed_Received")
-                        ? null
-                        : Convert.ToDateTime(reader["rec_Date_Filed_Received"]).ToString("yyyy-MM-dd")
+                    RecordCaseNumber = reader.IsDBNull("rec_Case_Number") ? "" : reader.GetString("rec_Case_Number"),
+                    RecordCaseTitle = reader.IsDBNull("rec_Case_Title") ? "" : reader.GetString("rec_Case_Title"),
+                    RecordCaseStatus = reader.IsDBNull("rec_Case_Status") ? "" : reader.GetString("rec_Case_Status"),
+                    RecordRepublicAct = reader.IsDBNull("rec_Republic_Act") ? "" : reader.GetString("rec_Republic_Act"),
+                    RecordNatureDescription = reader.IsDBNull("rec_Nature_Descrip") ? "" : reader.GetString("rec_Nature_Descrip"),
+                    RecordCaseStage = reader.IsDBNull("rec_Case_Stage") ? "" : reader.GetString("rec_Case_Stage"),
+                    RecordDateInputted = DateOnly.FromDateTime(reader.GetDateTime("rec_DateTime_Inputted")),
+                    RecordDateFiledReceived = DateOnly.FromDateTime(reader.GetDateTime("rec_Date_Filed_Received"))
                 };
 
                 results.Add(dto);
@@ -437,6 +436,7 @@ public class CourtRecordController : ControllerBase
             });
         }
     }
+
     //  --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
     //eto kailangan to para sa disposed at mga iba pa
@@ -457,18 +457,18 @@ public class CourtRecordController : ControllerBase
         await using var con = new MySqlConnection(modifiedConnectionString);
         await con.OpenAsync();
 
-
         string query = @"
-    SELECT 
-        rec_Case_Number, 
-        rec_Case_Title, 
-        rec_DateTime_Inputted,
-        rec_Date_Filed_Received,
-        rec_Case_Status,
-        rec_Republic_Act,
-        rec_Nature_Descrip
-    FROM COURTRECORD
-    WHERE rec_Case_Status = @caseStatus";
+        SELECT 
+            rec_Case_Number, 
+            rec_Case_Title, 
+            rec_DateTime_Inputted,
+            rec_Date_Filed_Received,
+            rec_Case_Status,
+            rec_Republic_Act,
+            rec_Nature_Descrip,
+            rec_Case_Stage
+        FROM COURTRECORD
+        WHERE rec_Case_Status = @caseStatus";
 
         await using var cmd = new MySqlCommand(query, con);
         cmd.Parameters.AddWithValue("@caseStatus", caseStatus);
@@ -487,14 +487,13 @@ public class CourtRecordController : ControllerBase
                     RecordCaseStatus = reader.IsDBNull(reader.GetOrdinal("rec_Case_Status")) ? string.Empty : reader.GetString(reader.GetOrdinal("rec_Case_Status")),
                     RecordRepublicAct = reader.IsDBNull(reader.GetOrdinal("rec_Republic_Act")) ? string.Empty : reader.GetString(reader.GetOrdinal("rec_Republic_Act")),
                     RecordNatureDescription = reader.IsDBNull(reader.GetOrdinal("rec_Nature_Descrip")) ? string.Empty : reader.GetString(reader.GetOrdinal("rec_Nature_Descrip")),
-                    // Handle rec_DateTime_Inputted
+                    RecordCaseStage = reader.IsDBNull(reader.GetOrdinal("rec_Case_Stage")) ? string.Empty : reader.GetString(reader.GetOrdinal("rec_Case_Stage")),
                     RecordDateInputted = reader.IsDBNull(reader.GetOrdinal("rec_DateTime_Inputted"))
-                        ? string.Empty
-                        : Convert.ToDateTime(reader["rec_DateTime_Inputted"]).ToString("yyyy-MM-dd"),
-                    // Handle rec_Date_Filed_Received
+                        ? default
+                        : DateOnly.FromDateTime(reader.GetDateTime(reader.GetOrdinal("rec_DateTime_Inputted"))),
                     RecordDateFiledReceived = reader.IsDBNull(reader.GetOrdinal("rec_Date_Filed_Received"))
-                        ? null
-                        : Convert.ToDateTime(reader["rec_Date_Filed_Received"]).ToString("yyyy-MM-dd")
+                        ? default
+                        : DateOnly.FromDateTime(reader.GetDateTime(reader.GetOrdinal("rec_Date_Filed_Received")))
                 };
 
                 results.Add(dto);

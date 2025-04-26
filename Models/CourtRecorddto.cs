@@ -62,24 +62,31 @@
 
     //Eto yung getALL sa Datagridview naka base kay joie
     public class GetAllCourtRecorddto
-    {   
-        public string RecordCaseNumber { get; set; } = string.Empty;
-        public string RecordCaseTitle { get; set; } = string.Empty;
-        public string RecordDateInputted { get; set; } = string.Empty; // Format: "yyyy-MM-dd"
-        public string? RecordDateFiledReceived { get; set; }  // Format: "yyyy-MM-dd"
-        public string RecordCaseStatus { get; set; } = string.Empty;
-        public string RecordRepublicAct { get; set; } = string.Empty;
-        public string RecordNatureDescription { get; set; } = string.Empty;
+    {
+        public string RecordCaseNumber { get; set; }
+        public string RecordCaseTitle { get; set; }
+        public DateOnly RecordDateInputted { get; set; }  // Date only (no time)
+        public DateOnly RecordDateFiledReceived { get; set; }
+        public string RecordCaseStatus { get; set; }
+        public string RecordRepublicAct { get; set; }
+        public string RecordNatureDescription { get; set; }
+        public string RecordCaseStage { get; set; } // NEW FIELD
     }
 
+
+
+    //eto demeey di ko na alam gagawin pinaka basic nalang to
     public class NewAddCourtRecorddto
     {
-        public string RecordCaseNumber { get; set; } = string.Empty;
-        public string RecordCaseTitle { get; set; } = string.Empty;
+        public string RecordCaseNumber { get; set; }
+        public string RecordCaseTitle { get; set; }
         public DateOnly RecordDateFiledReceived { get; set; }  // DATE only, required
         public DateOnly RecordDateFiledOcc { get; set; }        // DATE only, required
-        public string RecordRepublicAct { get; set; } = string.Empty;
-        public string RecordNatureDescription { get; set; } = string.Empty;
+        public string RecordRepublicAct { get; set; }
+        public string RecordNatureDescription { get; set; } 
+        public string RecordCaseStatus { get; set; }
+        public string RecordCaseStage { get; set; }
+
     }
 
 
