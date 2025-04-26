@@ -367,6 +367,38 @@ public class CourtRecordController : ControllerBase
         }
     }
 
+    //COURT RECORD ADDED TODAY
+    [HttpGet("CountCaseRecordsAddedToday")]
+    public async Task<IActionResult> CountCaseRecordsAddedToday()
+    {
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        try
+        {
+            // Get current date in Philippines timezone (date only)
+            var philippinesTime = TimeZoneInfo.ConvertTime(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila"));
+            var todayDate = philippinesTime.Date;
+
+            // MySQL query to count records where the date part of rec_DateTime_Inputted equals today
+            string query = @"
+            SELECT COUNT(*) 
+            FROM COURTRECORD 
+            WHERE DATE(rec_DateTime_Inputted) = @TodayDate";
+
+            using var cmd = new MySqlCommand(query, con);
+            cmd.Parameters.AddWithValue("@TodayDate", todayDate);
+
+            int count = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+            return Ok(count);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred: {ex.Message}");
+        }
+    }
+
+
     //for Datagridview
     [HttpGet("GetAllRecords")]
     public async Task<ActionResult<IEnumerable<GetAllCourtRecorddto>>> GetAllRecords()
@@ -548,8 +580,87 @@ public class CourtRecordController : ControllerBase
         return await GetRecordsByStatus("REVIVE");
     }
 
-   
 
+
+    //ETO sa VIEW TODAY SA COUNTING TO IN DASHBOARD
+    [HttpGet("GetCaseRecordsAddedToday")]
+    public async Task<ActionResult<IEnumerable<GetAllCourtRecorddto>>> GetCaseRecordsAddedToday()
+    {
+        string modifiedConnectionString = _connectionString;
+
+        if (!modifiedConnectionString.Contains("Allow Zero Datetime=true"))
+        {
+            var connBuilder = new MySqlConnectionStringBuilder(modifiedConnectionString)
+            {
+                AllowZeroDateTime = true,
+                ConvertZeroDateTime = true
+            };
+            modifiedConnectionString = connBuilder.ConnectionString;
+        }
+
+        await using var con = new MySqlConnection(modifiedConnectionString);
+        await con.OpenAsync();
+
+        try
+        {
+            // Get current date in Philippines timezone (date only)
+            var philippinesTime = TimeZoneInfo.ConvertTime(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila"));
+            var todayDate = philippinesTime.Date;
+
+            string query = @"
+            SELECT 
+                rec_Case_Number, 
+                rec_Case_Title, 
+                rec_DateTime_Inputted,
+                rec_Date_Filed_Received,
+                rec_Case_Status,
+                rec_Republic_Act,
+                rec_Nature_Descrip,
+                rec_Case_Stage
+            FROM COURTRECORD
+            WHERE DATE(rec_DateTime_Inputted) = @TodayDate";
+
+            await using var cmd = new MySqlCommand(query, con);
+            cmd.Parameters.AddWithValue("@TodayDate", todayDate);
+
+            var results = new List<GetAllCourtRecorddto>();
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                var dto = new GetAllCourtRecorddto
+                {
+                    RecordCaseNumber = reader.IsDBNull(reader.GetOrdinal("rec_Case_Number")) ? string.Empty : reader.GetString(reader.GetOrdinal("rec_Case_Number")),
+                    RecordCaseTitle = reader.IsDBNull(reader.GetOrdinal("rec_Case_Title")) ? string.Empty : reader.GetString(reader.GetOrdinal("rec_Case_Title")),
+                    RecordCaseStatus = reader.IsDBNull(reader.GetOrdinal("rec_Case_Status")) ? string.Empty : reader.GetString(reader.GetOrdinal("rec_Case_Status")),
+                    RecordRepublicAct = reader.IsDBNull(reader.GetOrdinal("rec_Republic_Act")) ? string.Empty : reader.GetString(reader.GetOrdinal("rec_Republic_Act")),
+                    RecordNatureDescription = reader.IsDBNull(reader.GetOrdinal("rec_Nature_Descrip")) ? string.Empty : reader.GetString(reader.GetOrdinal("rec_Nature_Descrip")),
+                    RecordCaseStage = reader.IsDBNull(reader.GetOrdinal("rec_Case_Stage")) ? string.Empty : reader.GetString(reader.GetOrdinal("rec_Case_Stage")),
+                    RecordDateInputted = reader.IsDBNull(reader.GetOrdinal("rec_DateTime_Inputted"))
+                        ? default
+                        : DateOnly.FromDateTime(reader.GetDateTime(reader.GetOrdinal("rec_DateTime_Inputted"))),
+                    RecordDateFiledReceived = reader.IsDBNull(reader.GetOrdinal("rec_Date_Filed_Received"))
+                        ? default
+                        : DateOnly.FromDateTime(reader.GetDateTime(reader.GetOrdinal("rec_Date_Filed_Received")))
+                };
+
+                results.Add(dto);
+            }
+
+            return Ok(results);
+        }
+        catch (Exception ex)
+        {
+            string innerExceptionMessage = ex.InnerException?.Message ?? "No inner exception";
+            return StatusCode(500, new
+            {
+                Message = "Error retrieving today's case records",
+                ErrorDetails = ex.Message,
+                InnerException = innerExceptionMessage,
+                StackTrace = ex.StackTrace
+            });
+        }
+    }
 
 
 
