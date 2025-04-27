@@ -80,13 +80,12 @@
     {
         public string RecordCaseNumber { get; set; }
         public string RecordCaseTitle { get; set; }
-        public DateOnly RecordDateFiledReceived { get; set; }  // DATE only, required
-        public DateOnly RecordDateFiledOcc { get; set; }        // DATE only, required
+        public DateTime RecordDateFiledReceived { get; set; }  // Changed to DateTime, required
+        public DateTime RecordDateFiledOcc { get; set; }       // Changed to DateTime, required
         public string RecordRepublicAct { get; set; }
-        public string RecordNatureDescription { get; set; } 
+        public string RecordNatureDescription { get; set; }
         public string RecordCaseStatus { get; set; }
         public string RecordCaseStage { get; set; }
-
     }
 
 

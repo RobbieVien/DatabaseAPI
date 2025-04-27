@@ -26,68 +26,60 @@ public class CourtRecordController : ControllerBase
         {
             return BadRequest("Invalid court record data.");
         }
-
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
-
         try
         {
             // Get current Philippine time
             var philippinesTime = TimeZoneInfo.ConvertTime(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila"));
             var dateInputted = philippinesTime; // rec_DateTime_Inputted
-
-            // Use the case number as provided (no modification)
+                                                // Use the case number as provided (no modification)
             string caseNumber = courtrecord.RecordCaseNumber.Trim();
-
             // Check if case number already exists
             var duplicateCount = await con.ExecuteScalarAsync<int>(
                 "SELECT COUNT(*) FROM COURTRECORD WHERE rec_Case_Number = @CaseNumber",
                 new { CaseNumber = caseNumber });
-
             if (duplicateCount > 0)
             {
                 return Conflict("A court record with the same case number already exists.");
             }
-
             // Prepare query
             string insertQuery = @"
-            INSERT INTO COURTRECORD (
-                rec_Case_Number,
-                rec_Case_Title,
-                rec_DateTime_Inputted,
-                rec_Date_Filed_Occ,
-                rec_Date_Filed_Received,
-                rec_Case_Status,
-                rec_Republic_Act,
-                rec_Nature_Descrip,
-                rec_Case_Stage
-            )
-            VALUES (
-                @CaseNumber,
-                @CaseTitle,
-                @RecordDateInputted,
-                @RecordDateFiledOcc,
-                @RecordDateFiledReceived,
-                @RecordCaseStatus,
-                @RecordRepublicAct,
-                @RecordNatureDescription,
-                @RecordCaseStage
-            );
-            SELECT LAST_INSERT_ID();";
-
+        INSERT INTO COURTRECORD (
+            rec_Case_Number,
+            rec_Case_Title,
+            rec_DateTime_Inputted,
+            rec_Date_Filed_Occ,
+            rec_Date_Filed_Received,
+            rec_Case_Status,
+            rec_Republic_Act,
+            rec_Nature_Descrip,
+            rec_Case_Stage
+        )
+        VALUES (
+            @CaseNumber,
+            @CaseTitle,
+            @RecordDateInputted,
+            @RecordDateFiledOcc,
+            @RecordDateFiledReceived,
+            @RecordCaseStatus,
+            @RecordRepublicAct,
+            @RecordNatureDescription,
+            @RecordCaseStage
+        );
+        SELECT LAST_INSERT_ID();";
             int newRecordId = await con.ExecuteScalarAsync<int>(insertQuery, new
             {
                 CaseNumber = caseNumber,
                 CaseTitle = courtrecord.RecordCaseTitle,
                 RecordDateInputted = dateInputted,
-                RecordDateFiledOcc = courtrecord.RecordDateFiledOcc.ToDateTime(TimeOnly.MinValue),
-                RecordDateFiledReceived = courtrecord.RecordDateFiledReceived.ToDateTime(TimeOnly.MinValue),
+                RecordDateFiledOcc = courtrecord.RecordDateFiledOcc.Date,  // Using .Date to get date part only
+                RecordDateFiledReceived = courtrecord.RecordDateFiledReceived.Date,  // Using .Date to get date part only
                 RecordCaseStatus = courtrecord.RecordCaseStatus,
                 RecordRepublicAct = courtrecord.RecordRepublicAct,
                 RecordNatureDescription = courtrecord.RecordNatureDescription,
-                RecordCaseStage = courtrecord.RecordCaseStage // <-- NEW PARAMETER
+                RecordCaseStage = courtrecord.RecordCaseStage
             });
-
             if (newRecordId > 0)
             {
                 return Ok(new { Message = $"Added {courtrecord.RecordCaseTitle} successfully.", RecordId = newRecordId });
