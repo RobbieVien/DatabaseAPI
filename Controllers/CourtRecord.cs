@@ -101,6 +101,105 @@ public class CourtRecordController : ControllerBase
 
 
 
+    [HttpPost("AddCourtRecordwithResponse")]
+    public async Task<IActionResult> AddCourtRecordwithResponse([FromBody] NewAddCourtRecorddto courtrecord)
+    {
+        if (courtrecord == null || string.IsNullOrWhiteSpace(courtrecord.RecordCaseNumber))
+        {
+            return BadRequest(new
+            {
+                ErrorCode = "INVALID_INPUT",
+                Message = "Invalid court record data."
+            });
+        }
+
+        using var con = new MySqlConnection(_connectionString);
+        await con.OpenAsync();
+
+        try
+        {
+            var philippinesTime = TimeZoneInfo.ConvertTime(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila"));
+            var dateInputted = philippinesTime;
+            string caseNumber = courtrecord.RecordCaseNumber.Trim();
+
+            var duplicateCount = await con.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM COURTRECORD WHERE rec_Case_Number = @CaseNumber",
+                new { CaseNumber = caseNumber });
+
+            if (duplicateCount > 0)
+            {
+                return Conflict(new
+                {
+                    ErrorCode = "DUPLICATE_CASE_NUMBER",
+                    Message = "A court record with the same case number already exists."
+                });
+            }
+
+            string insertQuery = @"
+            INSERT INTO COURTRECORD (
+                rec_Case_Number,
+                rec_Case_Title,
+                rec_DateTime_Inputted,
+                rec_Date_Filed_Occ,
+                rec_Date_Filed_Received,
+                rec_Case_Status,
+                rec_Republic_Act,
+                rec_Nature_Descrip,
+                rec_Case_Stage
+            )
+            VALUES (
+                @CaseNumber,
+                @CaseTitle,
+                @RecordDateInputted,
+                @RecordDateFiledOcc,
+                @RecordDateFiledReceived,
+                @RecordCaseStatus,
+                @RecordRepublicAct,
+                @RecordNatureDescription,
+                @RecordCaseStage
+            );
+            SELECT LAST_INSERT_ID();";
+
+            int newRecordId = await con.ExecuteScalarAsync<int>(insertQuery, new
+            {
+                CaseNumber = caseNumber,
+                CaseTitle = courtrecord.RecordCaseTitle,
+                RecordDateInputted = dateInputted,
+                RecordDateFiledOcc = courtrecord.RecordDateFiledOcc.Date,
+                RecordDateFiledReceived = courtrecord.RecordDateFiledReceived.Date,
+                RecordCaseStatus = courtrecord.RecordCaseStatus,
+                RecordRepublicAct = courtrecord.RecordRepublicAct,
+                RecordNatureDescription = courtrecord.RecordNatureDescription,
+                RecordCaseStage = courtrecord.RecordCaseStage
+            });
+
+            if (newRecordId > 0)
+            {
+                return Ok(new
+                {
+                    Message = $"Added {courtrecord.RecordCaseTitle} successfully.",
+                    RecordId = newRecordId
+                });
+            }
+            else
+            {
+                return StatusCode(500, new
+                {
+                    ErrorCode = "INSERT_FAILED",
+                    Message = "Failed to add the court record."
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new
+            {
+                ErrorCode = "UNHANDLED_EXCEPTION",
+                Message = "An error occurred while adding the court record.",
+                ErrorDetails = ex.Message
+            });
+        }
+    }
 
 
 
