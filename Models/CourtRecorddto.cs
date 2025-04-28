@@ -84,7 +84,6 @@
         public DateTime RecordDateFiledOcc { get; set; }       // Changed to DateTime, required
         public string RecordRepublicAct { get; set; }
         public string RecordNatureDescription { get; set; }
-        public string RecordCaseStatus { get; set; }
         public string RecordCaseStage { get; set; }
     }
 

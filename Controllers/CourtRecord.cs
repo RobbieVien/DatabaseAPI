@@ -33,8 +33,10 @@ public class CourtRecordController : ControllerBase
             // Get current Philippine time
             var philippinesTime = TimeZoneInfo.ConvertTime(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila"));
             var dateInputted = philippinesTime; // rec_DateTime_Inputted
-                                                // Use the case number as provided (no modification)
+
+            // Use the case number as provided (no modification)
             string caseNumber = courtrecord.RecordCaseNumber.Trim();
+
             // Check if case number already exists
             var duplicateCount = await con.ExecuteScalarAsync<int>(
                 "SELECT COUNT(*) FROM COURTRECORD WHERE rec_Case_Number = @CaseNumber",
@@ -43,31 +45,34 @@ public class CourtRecordController : ControllerBase
             {
                 return Conflict("A court record with the same case number already exists.");
             }
-            // Prepare query
+
+            // Prepare the insert query
             string insertQuery = @"
-        INSERT INTO COURTRECORD (
-            rec_Case_Number,
-            rec_Case_Title,
-            rec_DateTime_Inputted,
-            rec_Date_Filed_Occ,
-            rec_Date_Filed_Received,
-            rec_Case_Status,
-            rec_Republic_Act,
-            rec_Nature_Descrip,
-            rec_Case_Stage
-        )
-        VALUES (
-            @CaseNumber,
-            @CaseTitle,
-            @RecordDateInputted,
-            @RecordDateFiledOcc,
-            @RecordDateFiledReceived,
-            @RecordCaseStatus,
-            @RecordRepublicAct,
-            @RecordNatureDescription,
-            @RecordCaseStage
-        );
-        SELECT LAST_INSERT_ID();";
+    INSERT INTO COURTRECORD (
+        rec_Case_Number,
+        rec_Case_Title,
+        rec_DateTime_Inputted,
+        rec_Date_Filed_Occ,
+        rec_Date_Filed_Received,
+        rec_Case_Status, 
+        rec_Republic_Act,
+        rec_Nature_Descrip,
+        rec_Case_Stage
+    )
+    VALUES (
+        @CaseNumber,
+        @CaseTitle,
+        @RecordDateInputted,
+        @RecordDateFiledOcc,
+        @RecordDateFiledReceived,
+        @RecordCaseStatus, 
+        @RecordRepublicAct,
+        @RecordNatureDescription,
+        @RecordCaseStage
+    );
+    SELECT LAST_INSERT_ID();";
+
+            // Execute the query with parameters, including the "active" status
             int newRecordId = await con.ExecuteScalarAsync<int>(insertQuery, new
             {
                 CaseNumber = caseNumber,
@@ -75,11 +80,12 @@ public class CourtRecordController : ControllerBase
                 RecordDateInputted = dateInputted,
                 RecordDateFiledOcc = courtrecord.RecordDateFiledOcc.Date,  // Using .Date to get date part only
                 RecordDateFiledReceived = courtrecord.RecordDateFiledReceived.Date,  // Using .Date to get date part only
-                RecordCaseStatus = courtrecord.RecordCaseStatus,
+                RecordCaseStatus = "active",  // Passing "active" as a parameter
                 RecordRepublicAct = courtrecord.RecordRepublicAct,
                 RecordNatureDescription = courtrecord.RecordNatureDescription,
                 RecordCaseStage = courtrecord.RecordCaseStage
             });
+
             if (newRecordId > 0)
             {
                 return Ok(new { Message = $"Added {courtrecord.RecordCaseTitle} successfully.", RecordId = newRecordId });
@@ -98,6 +104,7 @@ public class CourtRecordController : ControllerBase
             });
         }
     }
+
 
 
 
@@ -167,8 +174,8 @@ public class CourtRecordController : ControllerBase
                 RecordDateInputted = dateInputted,
                 RecordDateFiledOcc = courtrecord.RecordDateFiledOcc.Date,
                 RecordDateFiledReceived = courtrecord.RecordDateFiledReceived.Date,
-                RecordCaseStatus = courtrecord.RecordCaseStatus,
                 RecordRepublicAct = courtrecord.RecordRepublicAct,
+                RecordCaseStatus = "active",
                 RecordNatureDescription = courtrecord.RecordNatureDescription,
                 RecordCaseStage = courtrecord.RecordCaseStage
             });
