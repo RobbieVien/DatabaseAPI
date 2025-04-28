@@ -35,4 +35,29 @@
         public int ScheduleNotify { get; set; }
     }
 
+    //ETO BAGO DENEEY--------------------------------------------------------------------------------------------
+    public class TaskAdding
+    {
+        public string ScheduleTaskTitle { get; set; }
+        public DateTime ScheduleDate { get; set; }
+        public string ScheduleTaskDescription { get; set; }
+    }
+
+    //eto sa datagridview sa schedule
+    public class TaskDisplay
+    {
+        public string ScheduleTaskTitle { get; set; }
+        public DateTime ScheduleDate { get; set; }
+        public string ScheduleTaskDescription { get; set; }
+        public string ScheduleStatus { get; set; }
+        public Boolean ScheduleCheckbox { get; set; }
+    }
+
+    public class DoubleClickTask
+    {
+        public string ScheduleTaskTitle { get; set; }
+        public DateTime ScheduleDate { get; set; }
+        public string ScheduleTaskDescription { get; set; }
+        public string ScheduleStatus { get; set; }
+    }
 }
