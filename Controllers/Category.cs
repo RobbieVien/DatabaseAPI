@@ -128,12 +128,6 @@ public class CategoryController : ControllerBase
                 changes.Add($"Updated Nature Case: \"{oldCategory.CategoryNatureCase}\" → \"{request.Category.CategoryNatureCase}\"");
             }
 
-            if (changes.Count > 0)
-            {
-                string logMessage = $"Updated category (ID: {id})";
-                string details = string.Join(", ", changes);
-                await Logger.LogAction(HttpContext, logMessage, "Category", id, details);
-            }
             request.Category.CategoryId = id;
             return Ok(request.Category);
         }

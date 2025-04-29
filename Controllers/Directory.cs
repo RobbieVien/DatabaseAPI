@@ -140,13 +140,7 @@ public class DirectoryController : ControllerBase
                     changes.Add($"Updated Status: \"{oldStatus}\" → \"{directory.DirectoryStatus}\"");
                 }
 
-                if (changes.Count > 0)
-                {
-                    string logMessage = $"Updated directory entry (ID: {id})";
-                    string details = string.Join(", ", changes);
-                    await Logger.LogAction(HttpContext,logMessage, "DIRECTORY", id, details);
-                }
-
+             
                 // CHANGED: Set the ID on the directory object and return it
                 directory.DirectoryId = id; // ADDED: Make sure ID is set on returned object
                 return Ok(directory); // CHANGED from: return Ok(new { Message = $"Directory entry with ID {id} updated successfully." });

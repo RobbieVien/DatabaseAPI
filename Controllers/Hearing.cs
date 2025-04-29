@@ -297,14 +297,6 @@ public class HearingController : ControllerBase
 
             if (result > 0)
             {
-                // Log changes if any
-                if (changes.Count > 0)
-                {
-                    string logMessage = $"Updated hearing record (ID: {id})";
-                    string details = string.Join(", ", changes);
-                    // This is where we log the details to the Logger
-                    await Logger.LogAction(HttpContext, logMessage, "HEARING", id, details);
-                }
 
                 return Ok(new { message = "Hearing updated successfully." });
             }

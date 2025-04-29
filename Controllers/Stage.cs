@@ -136,11 +136,6 @@ public class StageController : ControllerBase
                 changes.Add($"Stage: \"{oldStage.Stage}\" → \"{request.Stage.Stage.Trim()}\"");
             }
 
-            if (changes.Count > 0)
-            {
-                string details = string.Join(", ", changes);
-                await Logger.LogAction(HttpContext, "UPDATE", "Stage", id, details);
-            }
 
             return Ok(new { message = "Stage updated successfully." });
         }

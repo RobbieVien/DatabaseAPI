@@ -129,11 +129,7 @@ public class BranchController : ControllerBase
                 }
 
                 // Log the action
-                await Logger.LogAction(HttpContext,
-                    action: "UPDATE",
-                    tableName: "Branch",
-                    recordId: branchId,
-                    details: $"Branch ID {branchId} updated to '{newBranchName}'");
+    
 
                 return Ok(new { message = "Branch updated successfully." });
             }
