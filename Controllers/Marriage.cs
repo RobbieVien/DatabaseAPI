@@ -265,7 +265,6 @@ public class MarriageController : ControllerBase
         {
             using var connection = new MySqlConnection(_connectionString);
             await connection.OpenAsync();
-            var username = HttpContext.Session.GetString("UserName");
 
             // Check if marriage exists
             var checkQuery = "SELECT marriage_Id FROM Marriage WHERE marriage_Id = @MarriageId";

@@ -88,7 +88,6 @@ public class StageController : ControllerBase
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
 
-        var username = HttpContext.Session.GetString("UserName");
 
         // Fetch old stage
         string selectQuery = "SELECT stage_stage AS Stage FROM Stage WHERE stage_Id = @Id";
@@ -166,7 +165,6 @@ public class StageController : ControllerBase
         using (var con = new MySqlConnection(_connectionString))
         {
             await con.OpenAsync();
-            var username = HttpContext.Session.GetString("UserName");
             try
             {
                 // Check if the stage exists by ID

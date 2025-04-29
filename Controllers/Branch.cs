@@ -81,7 +81,6 @@ public class BranchController : ControllerBase
             using (var connection = new MySqlConnection(_connectionString))
             {
                 await connection.OpenAsync();
-                var username = HttpContext.Session.GetString("UserName");
 
                 // Validate input
                 if (branchDto == null || string.IsNullOrWhiteSpace(branchDto.BranchName))

@@ -23,4 +23,11 @@
         public string CategoryNatureCase { get; set; }  // Must match alias
         public int CategoryCount { get; set; }
     }
+
+    public class EditCategorydto
+    {
+        public string CategoryLegalCase { get; set; }  // Must match alias
+        public string CategoryRepublicAct { get; set; } // Must match alias
+        public string CategoryNatureCase { get; set; }  // Must match alias
+    }
 }

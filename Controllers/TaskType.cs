@@ -74,7 +74,6 @@ namespace DatabaseAPI.Controllers
             }
 
             string newName = taskTypeDto.TaskTypeName.Trim();
-            var username = HttpContext.Session.GetString("UserName");
     
             using (var con = new MySqlConnection(_connectionString))
             {
@@ -120,7 +119,6 @@ namespace DatabaseAPI.Controllers
         {
             if (taskTypeId <= 0)
                 return BadRequest("Valid Task Type ID is required.");
-            var username = HttpContext.Session.GetString("UserName");
 
             using (var con = new MySqlConnection(_connectionString))
             {

@@ -226,7 +226,7 @@ public class CourtRecordController : ControllerBase
 
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
-        var username = HttpContext.Session.GetString("UserName");
+
 
         try
         {

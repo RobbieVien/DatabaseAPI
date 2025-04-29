@@ -63,7 +63,7 @@ public class DirectoryController : ControllerBase
     }
 
     [HttpPut("DirectoryEdit/{id}")]
-    public async Task<IActionResult> DirectoryEdit(int id, [FromBody] DirectoryDto directory, [FromQuery] string userName)
+    public async Task<IActionResult> DirectoryEdit(int id, [FromBody] DirectoryDto directory)
     {
         if (id <= 0 || directory == null || string.IsNullOrWhiteSpace(directory.DirectoryName))
         {
@@ -72,7 +72,6 @@ public class DirectoryController : ControllerBase
 
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
-        var username = HttpContext.Session.GetString("UserName");
 
         try
         {
@@ -183,7 +182,6 @@ public class DirectoryController : ControllerBase
 
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
-        var username = HttpContext.Session.GetString("UserName");
 
         try
         {
