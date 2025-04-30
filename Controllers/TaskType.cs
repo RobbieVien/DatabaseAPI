@@ -74,7 +74,7 @@ namespace DatabaseAPI.Controllers
             }
 
             string newName = taskTypeDto.TaskTypeName.Trim();
-    
+
             using (var con = new MySqlConnection(_connectionString))
             {
                 await con.OpenAsync();
@@ -99,9 +99,11 @@ namespace DatabaseAPI.Controllers
                     if (rowsAffected == 0)
                         return StatusCode(500, "Failed to update Task Type.");
 
-                    await Logger.LogAction(HttpContext, "UPDATE", "TaskType", taskTypeId, $"Task Type updated to '{newName}'");
-
-                    return Ok(new { message = "Task Type updated successfully." });
+                    return Ok(new TaskTypeDto
+                    {
+                        TaskTypeId = taskTypeId,
+                        TaskTypeName = newName
+                    });
                 }
                 catch (Exception ex)
                 {
