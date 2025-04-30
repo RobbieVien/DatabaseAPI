@@ -88,7 +88,6 @@ public class StageController : ControllerBase
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
 
-
         // Fetch old stage
         string selectQuery = "SELECT stage_stage AS Stage FROM Stage WHERE stage_Id = @Id";
         var oldStage = await con.QueryFirstOrDefaultAsync<StageDto>(selectQuery, new { Id = id });
@@ -104,9 +103,9 @@ public class StageController : ControllerBase
 
         // Check for duplicate
         string duplicateCheck = @"
-        SELECT COUNT(*) FROM Stage 
-        WHERE LOWER(stage_stage) = LOWER(@Stage) 
-        AND stage_Id != @Id";
+    SELECT COUNT(*) FROM Stage 
+    WHERE LOWER(stage_stage) = LOWER(@Stage) 
+    AND stage_Id != @Id";
 
         int duplicateCount = await con.ExecuteScalarAsync<int>(duplicateCheck, new
         {
@@ -136,8 +135,11 @@ public class StageController : ControllerBase
                 changes.Add($"Stage: \"{oldStage.Stage}\" → \"{request.Stage.Stage.Trim()}\"");
             }
 
-
-            return Ok(new { message = "Stage updated successfully." });
+            return Ok(new EditStageDto
+            {
+                StageID = id,
+                Stage = request.Stage.Stage.Trim()
+            });
         }
 
         return StatusCode(500, "Update failed. No rows affected.");

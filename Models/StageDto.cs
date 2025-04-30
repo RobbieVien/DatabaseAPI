@@ -6,6 +6,14 @@
     }
     public class UpdateStageRequest
     {
-        public StageDto Stage { get; set; }
+        public EditStageDto Stage { get; set; }
     }
+
+    public class EditStageDto
+    {
+        public int StageID { get; set; }
+        public string Stage { get; set; }
+    }
+    
 }
+
