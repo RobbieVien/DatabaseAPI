@@ -38,6 +38,7 @@
     //ETO BAGO DENEEY--------------------------------------------------------------------------------------------
     public class TaskAdding
     {
+        public int TaskId { get; set; }
         public string ScheduleTaskTitle { get; set; }
         public DateTime ScheduleDate { get; set; }
         public string ScheduleTaskDescription { get; set; }

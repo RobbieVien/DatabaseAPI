@@ -74,7 +74,7 @@ public class BranchController : ControllerBase
 
     // Update Branch Name based on ID
     [HttpPut("UpdateBranch/{branchId}")]
-    public async Task<IActionResult> UpdateBranch(int branchId, [FromBody] BranchDto branchDto)
+    public async Task<IActionResult> UpdateBranch(int branchId, [FromBody] UpdateBranchDto branchDto)
     {
         try
         {
@@ -128,10 +128,11 @@ public class BranchController : ControllerBase
                     return StatusCode(500, "Failed to update branch.");
                 }
 
-                // Log the action
-    
-
-                return Ok(new { message = "Branch updated successfully." });
+                return Ok(new UpdateBranchDto
+                {
+                    BranchId = branchId,
+                    BranchName = newBranchName
+                });
             }
         }
         catch (Exception ex)
@@ -143,6 +144,7 @@ public class BranchController : ControllerBase
             });
         }
     }
+
 
 
 
