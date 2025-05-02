@@ -81,68 +81,94 @@ public class StageController : ControllerBase
 
     // Update Stage Name based on ID
     [HttpPut("UpdateStage/{id}")]
-    public async Task<IActionResult> UpdateStage(
-     int id,
-     [FromBody] UpdateStageRequest request)
+    public async Task<IActionResult> UpdateStage(int id, [FromBody] UpdateStageRequest request)
     {
+        if (id <= 0 || request?.Stage == null || string.IsNullOrWhiteSpace(request.Stage.Stage))
+        {
+            return BadRequest("Invalid stage data.");
+        }
+
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
 
-        // Fetch old stage
-        string selectQuery = "SELECT stage_stage AS Stage FROM Stage WHERE stage_Id = @Id";
-        var oldStage = await con.QueryFirstOrDefaultAsync<StageDto>(selectQuery, new { Id = id });
-
-        if (oldStage == null)
+        try
         {
-            return NotFound($"No stage found with ID: {id}");
-        }
+            Console.WriteLine($"Attempting to update stage entry with ID: {id}");
 
-        // Normalize nulls
-        oldStage.Stage ??= "";
-        request.Stage.Stage ??= "";
+            // Fetch old value
+            string oldStageValue = "";
+            string fetchOldQuery = "SELECT stage_stage FROM Stage WHERE stage_Id = @Id";
+            using var fetchCmd = new MySqlCommand(fetchOldQuery, con);
+            fetchCmd.Parameters.AddWithValue("@Id", id);
 
-        // Check for duplicate
-        string duplicateCheck = @"
-    SELECT COUNT(*) FROM Stage 
-    WHERE LOWER(stage_stage) = LOWER(@Stage) 
-    AND stage_Id != @Id";
-
-        int duplicateCount = await con.ExecuteScalarAsync<int>(duplicateCheck, new
-        {
-            Stage = request.Stage.Stage.Trim(),
-            Id = id
-        });
-
-        if (duplicateCount > 0)
-        {
-            return Conflict($"Stage name '{request.Stage.Stage}' already exists.");
-        }
-
-        // Update
-        string updateQuery = "UPDATE Stage SET stage_stage = @Stage WHERE stage_Id = @Id";
-        int rowsAffected = await con.ExecuteAsync(updateQuery, new
-        {
-            Stage = request.Stage.Stage.Trim(),
-            Id = id
-        });
-
-        if (rowsAffected > 0)
-        {
-            // Log changes
-            List<string> changes = new();
-            if (!oldStage.Stage.Equals(request.Stage.Stage.Trim(), StringComparison.OrdinalIgnoreCase))
+            using var reader = await fetchCmd.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
             {
-                changes.Add($"Stage: \"{oldStage.Stage}\" → \"{request.Stage.Stage.Trim()}\"");
+                oldStageValue = reader["stage_stage"]?.ToString() ?? "";
+            }
+            else
+            {
+                return NotFound($"No stage found with ID: {id}");
+            }
+            reader.Close();
+
+            // Normalize nulls
+            request.Stage.Stage ??= "";
+
+            // Duplicate check
+            string duplicateCheck = @"
+            SELECT COUNT(*) FROM Stage 
+            WHERE LOWER(stage_stage) = LOWER(@Stage) 
+              AND stage_Id != @Id";
+            using var duplicateCmd = new MySqlCommand(duplicateCheck, con);
+            duplicateCmd.Parameters.AddWithValue("@Stage", request.Stage.Stage.Trim());
+            duplicateCmd.Parameters.AddWithValue("@Id", id);
+            int duplicateCount = Convert.ToInt32(await duplicateCmd.ExecuteScalarAsync());
+
+            if (duplicateCount > 0)
+            {
+                return Conflict($"Stage name '{request.Stage.Stage}' already exists.");
             }
 
-            return Ok(new EditStageDto
+            // Update
+            string updateQuery = "UPDATE Stage SET stage_stage = @Stage WHERE stage_Id = @Id";
+            using var updateCmd = new MySqlCommand(updateQuery, con);
+            updateCmd.Parameters.AddWithValue("@Stage", request.Stage.Stage.Trim());
+            updateCmd.Parameters.AddWithValue("@Id", id);
+
+            int rowsAffected = await updateCmd.ExecuteNonQueryAsync();
+
+            if (rowsAffected > 0)
             {
-                StageID = id,
-                Stage = request.Stage.Stage.Trim()
+                // Log changes
+                List<string> changes = new();
+                if (!oldStageValue.Equals(request.Stage.Stage.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    changes.Add($"Updated Stage: \"{oldStageValue}\" → \"{request.Stage.Stage.Trim()}\"");
+                }
+
+                // Return updated object
+                return Ok(new EditStageDto
+                {
+                    StageID = id,
+                    Stage = request.Stage.Stage.Trim()
+                });
+            }
+            else
+            {
+                return StatusCode(500, "Update failed. No rows affected.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error updating stage: {ex.Message}");
+            Console.WriteLine($"Error StackTrace: {ex.StackTrace}");
+            return StatusCode(500, new
+            {
+                Message = "An error occurred while updating the stage.",
+                ErrorDetails = ex.Message
             });
         }
-
-        return StatusCode(500, "Update failed. No rows affected.");
     }
 
 
