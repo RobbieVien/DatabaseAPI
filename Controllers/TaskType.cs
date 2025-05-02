@@ -68,6 +68,7 @@ namespace DatabaseAPI.Controllers
         [HttpPut("UpdateTaskType/{taskTypeId}")]
         public async Task<IActionResult> UpdateTaskType(int taskTypeId, [FromBody] TaskTypeDto taskTypeDto)
         {
+            // Validate input
             if (taskTypeDto == null || string.IsNullOrWhiteSpace(taskTypeDto.TaskTypeName))
             {
                 return BadRequest("Invalid task type data.");
@@ -81,24 +82,28 @@ namespace DatabaseAPI.Controllers
 
                 try
                 {
+                    // Check if the TaskType exists
                     string checkQuery = "SELECT COUNT(*) FROM TaskType WHERE taskType_Id = @Id";
                     int exists = await con.ExecuteScalarAsync<int>(checkQuery, new { Id = taskTypeId });
 
                     if (exists == 0)
                         return NotFound($"Task Type with ID {taskTypeId} not found.");
 
+                    // Check for duplicate name (case-insensitive, excluding current)
                     string duplicateCheck = "SELECT COUNT(*) FROM TaskType WHERE LOWER(TaskType_name) = LOWER(@Name) AND taskType_Id != @Id";
                     int duplicates = await con.ExecuteScalarAsync<int>(duplicateCheck, new { Name = newName, Id = taskTypeId });
 
                     if (duplicates > 0)
                         return Conflict($"Task Type name '{newName}' already exists.");
 
+                    // Update TaskType
                     string updateQuery = "UPDATE TaskType SET TaskType_name = @Name WHERE taskType_Id = @Id";
                     int rowsAffected = await con.ExecuteAsync(updateQuery, new { Name = newName, Id = taskTypeId });
 
                     if (rowsAffected == 0)
                         return StatusCode(500, "Failed to update Task Type.");
 
+                    // Return updated DTO
                     return Ok(new TaskTypeDto
                     {
                         TaskTypeId = taskTypeId,
@@ -111,7 +116,6 @@ namespace DatabaseAPI.Controllers
                 }
             }
         }
-
 
 
 
