@@ -237,11 +237,12 @@ public class StageController : ControllerBase
             {
                 string query = @"
                 SELECT 
+                    s.stage_Id AS StageID,
                     s.stage_stage AS Stage, 
-                    COUNT(c.rec_Case_Stage) AS UsageCount
+                    COUNT(c.rec_Case_Stage) AS StageUsageCount
                 FROM Stage s
                 LEFT JOIN COURTRECORD c ON s.stage_stage = c.rec_Case_Stage
-                GROUP BY s.stage_stage
+                GROUP BY s.stage_Id, s.stage_stage
                 ORDER BY s.stage_stage ASC";
 
                 var stages = await con.QueryAsync<StageDto>(query);
@@ -253,6 +254,7 @@ public class StageController : ControllerBase
             }
         }
     }
+
 
 
 

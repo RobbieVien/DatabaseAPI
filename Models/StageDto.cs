@@ -2,7 +2,9 @@
 {
     public class StageDto
     {
+        public int StageID { get; set; }
         public string Stage { get; set; }
+        public int StageUsageCount { get; set; }
     }
     public class UpdateStageRequest
     {
