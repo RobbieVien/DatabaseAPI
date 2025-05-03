@@ -207,10 +207,11 @@ public class BranchController : ControllerBase
             try
             {
                 string query = @"
-            SELECT 
-                branch_Name AS BranchName 
-            FROM Branch
-            ORDER BY branch_Name ASC";
+                SELECT 
+                    branch_Id AS BranchId,
+                    branch_Name AS BranchName
+                FROM Branch
+                ORDER BY branch_Name ASC";
 
                 var branches = await con.QueryAsync<BranchDto>(query);
                 return Ok(branches);
