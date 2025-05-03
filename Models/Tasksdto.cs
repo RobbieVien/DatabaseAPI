@@ -47,6 +47,7 @@
     //eto sa datagridview sa schedule
     public class TaskDisplay
     {
+        public int TaskId { get; set; }
         public string ScheduleTaskTitle { get; set; }
         public DateTime ScheduleDate { get; set; }
         public string ScheduleTaskDescription { get; set; }

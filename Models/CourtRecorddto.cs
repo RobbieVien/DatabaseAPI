@@ -60,9 +60,10 @@
     }
 
 
-    //Eto yung getALL sa Datagridview naka base kay joie
+    //Eto yung get ALL sa Datagridview naka base kay joie
     public class GetAllCourtRecorddto
     {
+        public int CourtRecordId { get; set; }
         public string RecordCaseNumber { get; set; }
         public string RecordCaseTitle { get; set; }
         public DateOnly RecordDateInputted { get; set; }  // Date only (no time)

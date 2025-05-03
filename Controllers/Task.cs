@@ -320,7 +320,7 @@ public class TaskController : ControllerBase
     }
 
 
-
+    //eto sa datagridview
 
     [HttpGet("DisplayTasks")]
     public async Task<IActionResult> DisplayTasks()
@@ -336,9 +336,10 @@ public class TaskController : ControllerBase
                     TimeZoneInfo.FindSystemTimeZoneById("Singapore Standard Time")
                 );
 
-                // Retrieve all tasks
+                // Retrieve all tasks with sched_Id
                 var tasks = (await con.QueryAsync<TaskDisplay>(@"
                 SELECT 
+                    sched_Id AS TaskId,
                     sched_taskTitle AS ScheduleTaskTitle,
                     sched_date AS ScheduleDate,
                     sched_taskDescription AS ScheduleTaskDescription,
@@ -347,19 +348,19 @@ public class TaskController : ControllerBase
                 FROM Tasks
             ")).ToList();
 
-                foreach (var task in tasks.ToList()) // ToList() to allow safe removal inside loop
+                foreach (var task in tasks.ToList()) // Use ToList() to allow safe removal
                 {
                     // If checkbox is checked, delete the task
                     if (task.ScheduleCheckbox)
                     {
-                        await con.ExecuteAsync("DELETE FROM Tasks WHERE sched_taskTitle = @TaskTitle AND sched_date = @Date",
-                            new { TaskTitle = task.ScheduleTaskTitle, Date = task.ScheduleDate });
+                        await con.ExecuteAsync("DELETE FROM Tasks WHERE sched_Id = @TaskId",
+                            new { TaskId = task.TaskId });
 
-                        tasks.Remove(task); // Remove from the list to avoid displaying
+                        tasks.Remove(task); // Remove from list so it won't display
                         continue;
                     }
 
-                    // Check if the date is already past
+                    // Determine task status based on the date
                     if (task.ScheduleDate.Date < philippineTime.Date)
                     {
                         task.ScheduleStatus = "Overdue";
@@ -369,15 +370,15 @@ public class TaskController : ControllerBase
                         task.ScheduleStatus = "Pending";
                     }
 
-                    // Update status in the database
-                    await con.ExecuteAsync(@"UPDATE Tasks
+                    // Update the task status using sched_Id
+                    await con.ExecuteAsync(@"
+                    UPDATE Tasks
                     SET sched_status = @Status
-                    WHERE sched_taskTitle = @TaskTitle AND sched_date = @Date",
+                    WHERE sched_Id = @TaskId",
                         new
                         {
                             Status = task.ScheduleStatus,
-                            TaskTitle = task.ScheduleTaskTitle,
-                            Date = task.ScheduleDate
+                            TaskId = task.TaskId
                         });
                 }
 
@@ -390,6 +391,7 @@ public class TaskController : ControllerBase
         }
     }
 
+    //eto pag dinoble click sa sched
     [HttpGet("GetTaskDetails")]
     public async Task<IActionResult> GetTaskDetails()
     {
@@ -463,7 +465,7 @@ public class TaskController : ControllerBase
         }
     }
 
-    //viewing details
+    //eto sa daashboard to
 
     [HttpGet("ViewAllTasks")]
     public async Task<IActionResult> ViewAllTasks()
@@ -483,7 +485,7 @@ public class TaskController : ControllerBase
         return Ok(tasks);
     }
 
-
+    //daashboard to
     [HttpGet("ViewUpcomingTasks")]
     public async Task<IActionResult> ViewUpcomingTasks()
     {
@@ -503,6 +505,7 @@ public class TaskController : ControllerBase
 
         return Ok(tasks);
     }
+    //daashboard to
     [HttpGet("ViewDueTodayTasks")]
     public async Task<IActionResult> ViewDueTodayTasks()
     {
@@ -521,6 +524,7 @@ public class TaskController : ControllerBase
 
         return Ok(tasks);
     }
+    //daashboard to
     [HttpGet("ViewOverdueTasks")]
     public async Task<IActionResult> ViewOverdueTasks()
     {
@@ -539,6 +543,7 @@ public class TaskController : ControllerBase
 
         return Ok(tasks);
     }
+    //daashboard to
     //gumagana lahat ng counting kuhanin mo to 
     [HttpGet("CountTasks")]
     public async Task<IActionResult> CountTasks()
@@ -550,7 +555,7 @@ public class TaskController : ControllerBase
         int count = await con.ExecuteScalarAsync<int>(query);
         return Ok(count);
     }
-
+    //counting daashboard to
     [HttpGet("UpcomingTasks")]
     public async Task<IActionResult> UpcomingTasks()
     {
@@ -561,7 +566,7 @@ public class TaskController : ControllerBase
         int count = await con.ExecuteScalarAsync<int>(query);
         return Ok(count);
     }
-
+    //counting daashboard to
     [HttpGet("DueTodayTasks")]
     public async Task<IActionResult> DueTodayTasks()
     {
@@ -572,7 +577,7 @@ public class TaskController : ControllerBase
         int count = await con.ExecuteScalarAsync<int>(query);
         return Ok(count);
     }
-
+    //counting daashboard to
     [HttpGet("OverDueTasks")]
     public async Task<IActionResult> OverDueTasks()
     {
@@ -625,7 +630,7 @@ public class TaskController : ControllerBase
 
 
 
-    //eto nasa taas na to
+    //eto WALA NATO
     [HttpPut("UpdateTask/{scheduleId}")]
     public async Task<IActionResult> UpdateTask(int scheduleId, [FromBody] Tasksdto task)
     {
@@ -888,7 +893,7 @@ public class TaskController : ControllerBase
     }
 
 
-    //KUNIN MO TO 
+    //ETO YUNG DELETE TASK
     [HttpDelete("DeleteTasks/{id}")]
         public async Task<IActionResult> DeleteTasks(int id, [FromHeader(Name = "UserName")] string userName = "System")
         {
@@ -952,7 +957,7 @@ public class TaskController : ControllerBase
         }
 
 
-        //wag muna kunin to
+        //WALA NATO
         [HttpGet("GetTasks")]
         public async Task<IActionResult> GetTasks()
         {
@@ -990,7 +995,7 @@ public class TaskController : ControllerBase
             }
         }
    
-    //Wag mona kunin to
+    //Wala na to
     [HttpGet("GetTasksDashboard")]
     public async Task<IActionResult> GetTasksDashboard()
     {
@@ -1052,7 +1057,7 @@ public class TaskController : ControllerBase
             return Ok(users);
         }
 
-    //Gumagana tong export sa EXCEL
+    //ETO SA PRINTING NG EXCEL
     [HttpGet("export-tasks")]
     public async Task<IActionResult> ExportTasksReport()
     {
@@ -1125,7 +1130,7 @@ public class TaskController : ControllerBase
         }
     }
 
-    //gumagana to deeney download ka ng ITex Kernel yun kasi ginamit ko sakin e, or gawa kanalang ng pdf mo na naka base dun sa excel ko
+    //ETO NAMAN SA PDF
     [HttpGet("export-tasks-pdf")]
     public async Task<IActionResult> ExportTasksPdf()
     {

@@ -518,6 +518,7 @@ public class CourtRecordController : ControllerBase
 
         string query = @"
         SELECT 
+            courtRecord_Id,
             rec_Case_Number, 
             rec_Case_Title, 
             rec_DateTime_Inputted,
@@ -539,6 +540,7 @@ public class CourtRecordController : ControllerBase
             {
                 var dto = new GetAllCourtRecorddto
                 {
+                    CourtRecordId = reader.GetInt32(reader.GetOrdinal("courtRecord_Id")),
                     RecordCaseNumber = reader.IsDBNull("rec_Case_Number") ? "" : reader.GetString("rec_Case_Number"),
                     RecordCaseTitle = reader.IsDBNull("rec_Case_Title") ? "" : reader.GetString("rec_Case_Title"),
                     RecordCaseStatus = reader.IsDBNull("rec_Case_Status") ? "" : reader.GetString("rec_Case_Status"),
@@ -589,6 +591,7 @@ public class CourtRecordController : ControllerBase
 
         string query = @"
         SELECT 
+            courtRecord_Id,
             rec_Case_Number, 
             rec_Case_Title, 
             rec_DateTime_Inputted,
@@ -612,6 +615,7 @@ public class CourtRecordController : ControllerBase
             {
                 var dto = new GetAllCourtRecorddto
                 {
+                    CourtRecordId = reader.GetInt32(reader.GetOrdinal("courtRecord_Id")),
                     RecordCaseNumber = reader.IsDBNull(reader.GetOrdinal("rec_Case_Number")) ? string.Empty : reader.GetString(reader.GetOrdinal("rec_Case_Number")),
                     RecordCaseTitle = reader.IsDBNull(reader.GetOrdinal("rec_Case_Title")) ? string.Empty : reader.GetString(reader.GetOrdinal("rec_Case_Title")),
                     RecordCaseStatus = reader.IsDBNull(reader.GetOrdinal("rec_Case_Status")) ? string.Empty : reader.GetString(reader.GetOrdinal("rec_Case_Status")),
@@ -707,6 +711,7 @@ public class CourtRecordController : ControllerBase
 
             string query = @"
             SELECT 
+                courtRecord_Id,
                 rec_Case_Number, 
                 rec_Case_Title, 
                 rec_DateTime_Inputted,
@@ -728,6 +733,7 @@ public class CourtRecordController : ControllerBase
             {
                 var dto = new GetAllCourtRecorddto
                 {
+                    CourtRecordId = reader.GetInt32(reader.GetOrdinal("courtRecord_Id")),
                     RecordCaseNumber = reader.IsDBNull(reader.GetOrdinal("rec_Case_Number")) ? string.Empty : reader.GetString(reader.GetOrdinal("rec_Case_Number")),
                     RecordCaseTitle = reader.IsDBNull(reader.GetOrdinal("rec_Case_Title")) ? string.Empty : reader.GetString(reader.GetOrdinal("rec_Case_Title")),
                     RecordCaseStatus = reader.IsDBNull(reader.GetOrdinal("rec_Case_Status")) ? string.Empty : reader.GetString(reader.GetOrdinal("rec_Case_Status")),
