@@ -166,7 +166,7 @@ namespace DatabaseAPI.Controllers
 
                 try
                 {
-                    string query = "SELECT taskType_Id, TaskType_name AS TaskTypeName FROM TaskType ORDER BY TaskType_name ASC";
+                    string query = "SELECT taskType_Id AS TaskTypeId, TaskType_name AS TaskTypeName FROM TaskType ORDER BY TaskType_name ASC";
                     var taskTypes = await con.QueryAsync<TaskTypeDto>(query);
                     return Ok(taskTypes);
                 }
@@ -176,6 +176,7 @@ namespace DatabaseAPI.Controllers
                 }
             }
         }
+
 
     }
 
