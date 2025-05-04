@@ -40,12 +40,16 @@
     // ETO SA UPDATE
     public class UpdateCourtRecorddto
     {
+        public int CourtRecordId { get; set; }
         public string RecordCaseNumber { get; set; } = string.Empty;
         public string RecordCaseTitle { get; set; } = string.Empty;
         public string RecordCaseStatus { get; set; } = string.Empty;
         public string RecordRepublicAct { get; set; } = string.Empty;
+        public string RecordCaseStage { get; set; } = string.Empty;
         public string RecordNatureDescription { get; set; } = string.Empty;
+        //etong record transfer magiging to Branch
         public string RecordTransfer { get; set; } = string.Empty;
+        public Boolean RecordTransferCheckbox { get; set; }
 
         // Update to Nullable DateTime (DateTime?)
         public DateTime? RecordDateFiledOCC { get; set; }
@@ -53,6 +57,7 @@
         public DateTime? RecordDateDisposal { get; set; }
         public DateTime? RecordDateArchival { get; set; }
         public DateTime? RecordDateRevival { get; set; }
+        public DateTime? RecordDateRemoval { get; set; }
 
         public string CaseStage { get; set; } = string.Empty;
 

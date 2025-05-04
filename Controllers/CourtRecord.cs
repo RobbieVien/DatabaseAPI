@@ -233,7 +233,6 @@ public class CourtRecordController : ControllerBase
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
 
-
         try
         {
             Console.WriteLine($"User '{editedBy}' is updating court record with ID: {id}");
@@ -252,6 +251,7 @@ public class CourtRecordController : ControllerBase
             string oldCaseTitle = existingRecord?.rec_Case_Title ?? "";
             string oldCaseStatus = existingRecord?.rec_Case_Status ?? "";
 
+            // Check for duplicate case number in other records
             var duplicateCount = await con.ExecuteScalarAsync<int>(
                 "SELECT COUNT(*) FROM COURTRECORD WHERE rec_Case_Number = @CaseNumber AND courtRecord_Id != @Id",
                 new { CaseNumber = courtrecord.RecordCaseNumber.Trim(), Id = id });
@@ -261,10 +261,13 @@ public class CourtRecordController : ControllerBase
                 return Conflict("Another court record with the same case number already exists.");
             }
 
-            // Get the latest hearing case date where hearing_Case_Num matches rec_Case_Number
+            // Get the latest hearing_Case_Date from Hearing table matching both case number and case title
             DateTime? nextHearingDate = await con.QueryFirstOrDefaultAsync<DateTime?>(
-                "SELECT hearing_Case_Date FROM Hearing WHERE hearing_Case_Num = @CaseNumber ORDER BY hearing_Case_Date DESC LIMIT 1",
-                new { CaseNumber = courtrecord.RecordCaseNumber.Trim() });
+                @"SELECT hearing_Case_Date 
+              FROM Hearing 
+              WHERE hearing_Case_Num = @CaseNumber AND hearing_Case_Title = @CaseTitle
+              ORDER BY hearing_Case_Date DESC LIMIT 1",
+                new { CaseNumber = courtrecord.RecordCaseNumber.Trim(), CaseTitle = courtrecord.RecordCaseTitle.Trim() });
 
             string updateQuery = @"UPDATE COURTRECORD 
                                SET rec_Case_Number = @CaseNumber,
@@ -273,12 +276,14 @@ public class CourtRecordController : ControllerBase
                                    rec_Republic_Act = @RecordRepublicAct,
                                    rec_Nature_Descrip = @RecordNatureDescription,
                                    rec_Transferred = @RecordTransfer,
+                                   rec_Transferred_checkbox = @RecordTransferCheckbox,
                                    rec_Date_Filed_Occ = @RecordDateFiledOCC,
                                    rec_Date_Filed_Received = @RecordDateFiledReceived,
                                    rec_Case_Stage = @CaseStage,
                                    rec_Date_Diposal = @RecordDateDisposal,
                                    rec_Date_Archival = @RecordDateArchival,
                                    rec_Date_Revival = @RecordDateRevival,
+                                   rec_Date_Removal = @RecordDateRemoval,
                                    rec_Next_Hearing = @RecordNextHearing
                                WHERE courtRecord_Id = @Id";
 
@@ -290,18 +295,19 @@ public class CourtRecordController : ControllerBase
                 RecordRepublicAct = courtrecord.RecordRepublicAct,
                 RecordNatureDescription = courtrecord.RecordNatureDescription,
                 RecordTransfer = courtrecord.RecordTransfer,
+                RecordTransferCheckbox = courtrecord.RecordTransferCheckbox ? 1 : 0,
 
-                // Ensure these dates are nullable DateTime? and converted correctly.
-                RecordDateFiledOCC = courtrecord.RecordDateFiledOCC ?? (DateTime?)null,
-                RecordDateFiledReceived = courtrecord.RecordDateFiledReceived ?? (DateTime?)null,
+                RecordDateFiledOCC = courtrecord.RecordDateFiledOCC,
+                RecordDateFiledReceived = courtrecord.RecordDateFiledReceived,
                 CaseStage = courtrecord.CaseStage,
 
-                RecordDateDisposal = courtrecord.RecordDateDisposal ?? (DateTime?)null,
-                RecordDateArchival = courtrecord.RecordDateArchival ?? (DateTime?)null,
-                RecordDateRevival = courtrecord.RecordDateRevival ?? (DateTime?)null,
+                RecordDateDisposal = courtrecord.RecordDateDisposal,
+                RecordDateArchival = courtrecord.RecordDateArchival,
+                RecordDateRevival = courtrecord.RecordDateRevival,
+                RecordDateRemoval = courtrecord.RecordDateRemoval,
 
-                // Handle nullable DateTime for the next hearing
-                RecordNextHearing = nextHearingDate ?? (DateTime?)null,
+                // Use hearing date from Hearing table if available, else keep existing or null
+                RecordNextHearing = nextHearingDate ?? courtrecord.RecordNextHearing,
 
                 Id = id
             });
@@ -320,8 +326,6 @@ public class CourtRecordController : ControllerBase
 
             if (rowsAffected > 0)
             {
-                await Logger.LogAction(HttpContext, "Updated Court Record", "COURTRECORD", id, details);
-
                 return Ok(new { Message = $"Court record with ID {id} updated successfully by {editedBy}.", Details = details });
             }
             else
@@ -335,6 +339,7 @@ public class CourtRecordController : ControllerBase
             return StatusCode(500, new { Message = "An error occurred while updating the court record.", ErrorDetails = ex.Message });
         }
     }
+
 
 
 
