@@ -20,24 +20,28 @@ public class CourtRecordController : ControllerBase
     }
 
     [HttpPost("AddCourtRecord")]
-    public async Task<IActionResult> AddCourtRecord([FromBody] NewAddCourtRecorddto courtrecord)
+    public async Task<IActionResult> AddCourtRecord([FromBody] NewCourtRecorddto courtrecord)
     {
         if (courtrecord == null || string.IsNullOrWhiteSpace(courtrecord.RecordCaseNumber))
         {
             return BadRequest("Invalid court record data.");
         }
+
+        // If RecordTransfer is empty or null, set it to "This Branch"
+        string recordTransferValue = string.IsNullOrWhiteSpace(courtrecord.RecordTransfer)
+            ? "This Branch"
+            : courtrecord.RecordTransfer.Trim();
+
         using var con = new MySqlConnection(_connectionString);
         await con.OpenAsync();
+
         try
         {
-            // Get current Philippine time
             var philippinesTime = TimeZoneInfo.ConvertTime(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila"));
             var dateInputted = philippinesTime; // rec_DateTime_Inputted
 
-            // Use the case number as provided (no modification)
             string caseNumber = courtrecord.RecordCaseNumber.Trim();
 
-            // Check if case number already exists
             var duplicateCount = await con.ExecuteScalarAsync<int>(
                 "SELECT COUNT(*) FROM COURTRECORD WHERE rec_Case_Number = @CaseNumber",
                 new { CaseNumber = caseNumber });
@@ -46,44 +50,45 @@ public class CourtRecordController : ControllerBase
                 return Conflict("A court record with the same case number already exists.");
             }
 
-            // Prepare the insert query
             string insertQuery = @"
-    INSERT INTO COURTRECORD (
-        rec_Case_Number,
-        rec_Case_Title,
-        rec_DateTime_Inputted,
-        rec_Date_Filed_Occ,
-        rec_Date_Filed_Received,
-        rec_Case_Status, 
-        rec_Republic_Act,
-        rec_Nature_Descrip,
-        rec_Case_Stage
-    )
-    VALUES (
-        @CaseNumber,
-        @CaseTitle,
-        @RecordDateInputted,
-        @RecordDateFiledOcc,
-        @RecordDateFiledReceived,
-        @RecordCaseStatus, 
-        @RecordRepublicAct,
-        @RecordNatureDescription,
-        @RecordCaseStage
-    );
-    SELECT LAST_INSERT_ID();";
+        INSERT INTO COURTRECORD (
+            rec_Case_Number,
+            rec_Case_Title,
+            rec_DateTime_Inputted,
+            rec_Date_Filed_Occ,
+            rec_Date_Filed_Received,
+            rec_Case_Status, 
+            rec_Republic_Act,
+            rec_Nature_Descrip,
+            rec_Transferred,
+            rec_Transferred_checkbox
+        )
+        VALUES (
+            @CaseNumber,
+            @CaseTitle,
+            @RecordDateInputted,
+            @RecordDateFiledOcc,
+            @RecordDateFiledReceived,
+            @RecordCaseStatus, 
+            @RecordRepublicAct,
+            @RecordNatureDescription,
+            @RecordTransfer,
+            @RecordTransferCheckbox
+        );
+        SELECT LAST_INSERT_ID();";
 
-            // Execute the query with parameters, including the "active" status
             int newRecordId = await con.ExecuteScalarAsync<int>(insertQuery, new
             {
                 CaseNumber = caseNumber,
                 CaseTitle = courtrecord.RecordCaseTitle,
                 RecordDateInputted = dateInputted,
-                RecordDateFiledOcc = courtrecord.RecordDateFiledOcc.Date,  // Using .Date to get date part only
-                RecordDateFiledReceived = courtrecord.RecordDateFiledReceived.Date,  // Using .Date to get date part only
-                RecordCaseStatus = "active",  // Passing "active" as a parameter
+                RecordDateFiledOcc = courtrecord.RecordDateFiledOCC != null ? DateTime.Parse(courtrecord.RecordDateFiledOCC).Date : (DateTime?)null,
+                RecordDateFiledReceived = courtrecord.RecordDateFiledReceived != null ? DateTime.Parse(courtrecord.RecordDateFiledReceived).Date : (DateTime?)null,
+                RecordCaseStatus = "active",
                 RecordRepublicAct = courtrecord.RecordRepublicAct,
                 RecordNatureDescription = courtrecord.RecordNatureDescription,
-                RecordCaseStage = courtrecord.RecordCaseStage
+                RecordTransfer = recordTransferValue,
+                RecordTransferCheckbox = courtrecord.RecordTransferCheckbox ? 1 : 0
             });
 
             if (newRecordId > 0)
@@ -104,6 +109,7 @@ public class CourtRecordController : ControllerBase
             });
         }
     }
+
 
 
 
@@ -400,6 +406,10 @@ public class CourtRecordController : ControllerBase
             return StatusCode(500, new { Message = "An error occurred while deleting the court record.", ErrorDetails = ex.Message });
         }
     }
+
+
+
+
 
 
     //COUNT-ACTIVE-CASE-RECORDS

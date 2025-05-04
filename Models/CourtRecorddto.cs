@@ -32,6 +32,7 @@
         public string? RecordDateFiledOCC { get; set; }  // Format: "yyyy-MM-dd" 
         public string? RecordDateFiledReceived { get; set; }  // Format: "yyyy-MM-dd"
         public string RecordTransfer { get; set; } = string.Empty;
+        public Boolean RecordTransferCheckbox { get; set; } 
         public string RecordRepublicAct { get; set; } = string.Empty;
         public string RecordNatureDescription { get; set; } = string.Empty;
     }
